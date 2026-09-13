@@ -159,3 +159,69 @@
   width: 60px;
   height: 60px;
 }
+
+.mmm-spotify-sonos__search-input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: none;
+  font-size: 1rem;
+}
+
+.mmm-spotify-sonos__results-row {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.mmm-spotify-sonos__result-tile {
+  flex: 0 0 auto;
+  width: 140px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.mmm-spotify-sonos__result-image {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.mmm-spotify-sonos__result-name {
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.mmm-spotify-sonos__result-subtitle {
+  font-size: 0.8em;
+  opacity: 0.75;
+}
+
+.mmm-spotify-sonos__result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.mmm-spotify-sonos__result-action {
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.35rem;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+
+.mmm-spotify-sonos__overlay-error {
+  background: rgba(220, 50, 50, 0.25);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9em;
+}

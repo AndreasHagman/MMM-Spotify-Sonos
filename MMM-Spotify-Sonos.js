@@ -18,6 +18,8 @@ Module.register("MMM-Spotify-Sonos", {
     this.devices = [];
     this.activeDeviceId = null;
     this._overlayEl = null;
+    this.searchResults = { tracks: [], playlists: [] };
+    this._searchDebounceTimer = null;
     this.sendSocketNotification("SPOTIFY_CONFIG", this.config);
   },
 
@@ -59,7 +61,18 @@ Module.register("MMM-Spotify-Sonos", {
         }
         this._renderOverlayBody();
         break;
+      case "SPOTIFY_SEARCH_RESULT":
+        this.searchResults = payload;
+        this._renderOverlayBody();
+        break;
     }
+  },
+
+  _debouncedSearch(query) {
+    if (this._searchDebounceTimer) clearTimeout(this._searchDebounceTimer);
+    this._searchDebounceTimer = setTimeout(() => {
+      this.sendSocketNotification("SPOTIFY_SEARCH", { query });
+    }, this.config.searchDebounce);
   },
 
   _requestLogin() {
@@ -278,11 +291,115 @@ Module.register("MMM-Spotify-Sonos", {
     return controls;
   },
 
+  _buildSearchBox() {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "mmm-spotify-sonos__search-input";
+    input.placeholder = this.translate("SEARCH_PLACEHOLDER");
+    input.addEventListener("input", () => this._debouncedSearch(input.value));
+    return input;
+  },
+
+  _buildResultTile(item) {
+    const tile = document.createElement("div");
+    tile.className = "mmm-spotify-sonos__result-tile";
+
+    if (item.imageUrl) {
+      const image = document.createElement("img");
+      image.className = "mmm-spotify-sonos__result-image";
+      image.src = item.imageUrl;
+      tile.appendChild(image);
+    }
+
+    const info = document.createElement("div");
+    info.className = "mmm-spotify-sonos__result-info";
+    const name = document.createElement("div");
+    name.className = "mmm-spotify-sonos__result-name";
+    name.innerText = item.name;
+    info.appendChild(name);
+    const subtitle = document.createElement("div");
+    subtitle.className = "mmm-spotify-sonos__result-subtitle";
+    subtitle.innerText = item.type === "track" ? item.artist : item.owner;
+    info.appendChild(subtitle);
+    tile.appendChild(info);
+
+    const actions = document.createElement("div");
+    actions.className = "mmm-spotify-sonos__result-actions";
+
+    const playBtn = document.createElement("button");
+    playBtn.type = "button";
+    playBtn.className = "mmm-spotify-sonos__result-action";
+    playBtn.innerText = this.translate("PLAY_NOW");
+    playBtn.addEventListener("click", () => this._handlePlayNow(item));
+    actions.appendChild(playBtn);
+
+    const queueBtn = document.createElement("button");
+    queueBtn.type = "button";
+    queueBtn.className = "mmm-spotify-sonos__result-action";
+    queueBtn.innerText = this.translate("ADD_TO_QUEUE");
+    queueBtn.addEventListener("click", () => this._handleQueueAdd(item));
+    actions.appendChild(queueBtn);
+
+    tile.appendChild(actions);
+    return tile;
+  },
+
+  _handlePlayNow(item) {
+    if (!this.activeDeviceId) {
+      const picker = this._overlayBodyEl?.querySelector(".mmm-spotify-sonos__device-picker-list");
+      if (picker) picker.hidden = false;
+      return;
+    }
+    this.sendSocketNotification("SPOTIFY_PLAY_NOW", { deviceId: this.activeDeviceId, uri: item.uri, type: item.type });
+  },
+
+  _handleQueueAdd(item) {
+    if (!this.activeDeviceId) {
+      this.lastError = this.translate("NO_ACTIVE_SPEAKER");
+      this._renderOverlayBody();
+      return;
+    }
+    this.sendSocketNotification("SPOTIFY_QUEUE_ADD", { uri: item.uri, deviceId: this.activeDeviceId });
+  },
+
+  _buildResultsSection() {
+    const section = document.createElement("div");
+    section.className = "mmm-spotify-sonos__results";
+
+    const tracksHeading = document.createElement("h3");
+    tracksHeading.innerText = this.translate("TRACKS");
+    section.appendChild(tracksHeading);
+    const tracksRow = document.createElement("div");
+    tracksRow.className = "mmm-spotify-sonos__results-row";
+    this.searchResults.tracks.forEach((track) => tracksRow.appendChild(this._buildResultTile(track)));
+    section.appendChild(tracksRow);
+
+    const playlistsHeading = document.createElement("h3");
+    playlistsHeading.innerText = this.translate("PLAYLISTS");
+    section.appendChild(playlistsHeading);
+    const playlistsRow = document.createElement("div");
+    playlistsRow.className = "mmm-spotify-sonos__results-row";
+    this.searchResults.playlists.forEach((playlist) => playlistsRow.appendChild(this._buildResultTile(playlist)));
+    section.appendChild(playlistsRow);
+
+    return section;
+  },
+
   _renderOverlayBody() {
     if (!this._overlayBodyEl) return;
     this._overlayBodyEl.innerHTML = "";
     this._overlayBodyEl.appendChild(this._buildDevicePicker());
     this._overlayBodyEl.appendChild(this._buildNowPlayingControls());
+    this._overlayBodyEl.appendChild(this._buildSearchBox());
+
+    if (this.lastError) {
+      const errorEl = document.createElement("div");
+      errorEl.className = "mmm-spotify-sonos__overlay-error";
+      errorEl.innerText = this.lastError;
+      this._overlayBodyEl.appendChild(errorEl);
+    }
+
+    this._overlayBodyEl.appendChild(this._buildResultsSection());
   },
 
   getDom() {
