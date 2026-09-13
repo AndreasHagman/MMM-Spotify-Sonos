@@ -15,6 +15,9 @@ Module.register("MMM-Spotify-Sonos", {
     this.playback = { isPlaying: false, device: null, track: null };
     this.lastError = null;
     this.overlayOpen = false;
+    this.devices = [];
+    this.activeDeviceId = null;
+    this._overlayEl = null;
     this.sendSocketNotification("SPOTIFY_CONFIG", this.config);
   },
 
@@ -47,6 +50,14 @@ Module.register("MMM-Spotify-Sonos", {
         this.lastError = payload.message;
         Log.error(`[MMM-Spotify-Sonos] ${payload.message}`);
         this.updateDom();
+        break;
+      case "SPOTIFY_DEVICES_RESULT":
+        this.devices = payload.devices;
+        if (!this.activeDeviceId) {
+          const active = this.devices.find((d) => d.isActive);
+          if (active) this.activeDeviceId = active.id;
+        }
+        this._renderOverlayBody();
         break;
     }
   },
@@ -129,7 +140,149 @@ Module.register("MMM-Spotify-Sonos", {
   },
 
   _openOverlay() {
-    // Implemented in Task 12.
+    if (this._overlayEl) return;
+    this.overlayOpen = true;
+
+    const backdrop = document.createElement("div");
+    backdrop.className = "mmm-spotify-sonos__overlay-backdrop";
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) this._closeOverlay();
+    });
+
+    const sheet = document.createElement("div");
+    sheet.className = "mmm-spotify-sonos__overlay-sheet";
+
+    const header = document.createElement("div");
+    header.className = "mmm-spotify-sonos__overlay-header";
+
+    const title = document.createElement("span");
+    title.className = "mmm-spotify-sonos__overlay-title";
+    title.innerText = "Spotify";
+    header.appendChild(title);
+
+    const logoutBtn = document.createElement("button");
+    logoutBtn.type = "button";
+    logoutBtn.className = "mmm-spotify-sonos__overlay-logout";
+    logoutBtn.innerText = this.translate("LOG_OUT");
+    logoutBtn.addEventListener("click", () => this._requestLogout());
+    header.appendChild(logoutBtn);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "mmm-spotify-sonos__overlay-close";
+    closeBtn.innerText = "×";
+    closeBtn.setAttribute("aria-label", this.translate("CLOSE"));
+    closeBtn.addEventListener("click", () => this._closeOverlay());
+    header.appendChild(closeBtn);
+
+    sheet.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "mmm-spotify-sonos__overlay-body";
+    sheet.appendChild(body);
+
+    backdrop.appendChild(sheet);
+    document.body.appendChild(backdrop);
+
+    this._overlayEl = backdrop;
+    this._overlayBodyEl = body;
+
+    this.sendSocketNotification("SPOTIFY_DEVICES_REQUEST");
+    this._renderOverlayBody();
+  },
+
+  _closeOverlay() {
+    this.overlayOpen = false;
+    if (this._overlayEl) {
+      this._overlayEl.remove();
+      this._overlayEl = null;
+      this._overlayBodyEl = null;
+    }
+  },
+
+  _buildDevicePicker() {
+    const container = document.createElement("div");
+    container.className = "mmm-spotify-sonos__device-picker";
+
+    const activeDevice = this.devices.find((d) => d.id === this.activeDeviceId);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "mmm-spotify-sonos__device-picker-toggle";
+    toggle.innerText = `${this.translate("PLAYING_ON")}: ${activeDevice ? activeDevice.name : "—"} ▾`;
+
+    const list = document.createElement("div");
+    list.className = "mmm-spotify-sonos__device-picker-list";
+    list.hidden = true;
+
+    if (this.devices.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "mmm-spotify-sonos__device-picker-empty";
+      empty.innerText = this.translate("NO_DEVICES_FOUND");
+      list.appendChild(empty);
+    }
+
+    this.devices.forEach((device) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "mmm-spotify-sonos__device-picker-item";
+      item.innerText = device.name;
+      item.addEventListener("click", () => {
+        this.activeDeviceId = device.id;
+        this.sendSocketNotification("SPOTIFY_TRANSFER", { deviceId: device.id });
+        list.hidden = true;
+        this._renderOverlayBody();
+      });
+      list.appendChild(item);
+    });
+
+    toggle.addEventListener("click", () => {
+      list.hidden = !list.hidden;
+    });
+
+    container.appendChild(toggle);
+    container.appendChild(list);
+    return container;
+  },
+
+  _buildNowPlayingControls() {
+    const controls = document.createElement("div");
+    controls.className = "mmm-spotify-sonos__overlay-controls";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "mmm-spotify-sonos__control-btn";
+    prevBtn.innerText = "⏮";
+    prevBtn.addEventListener("click", () => this.sendSocketNotification("SPOTIFY_SKIP", { direction: "previous" }));
+    controls.appendChild(prevBtn);
+
+    const isPlaying = this.playback.isPlaying;
+    const playPauseBtn = document.createElement("button");
+    playPauseBtn.type = "button";
+    playPauseBtn.className = "mmm-spotify-sonos__control-btn mmm-spotify-sonos__control-btn--primary";
+    playPauseBtn.innerText = isPlaying ? "⏸" : "▶";
+    playPauseBtn.addEventListener("click", () => {
+      // Optimistic flip — SPOTIFY_PLAYBACK_STATE will correct it on the next poll tick.
+      this.playback = { ...this.playback, isPlaying: !isPlaying };
+      this.sendSocketNotification("SPOTIFY_PLAYPAUSE", { isPlaying });
+      this._renderOverlayBody();
+    });
+    controls.appendChild(playPauseBtn);
+
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "mmm-spotify-sonos__control-btn";
+    nextBtn.innerText = "⏭";
+    nextBtn.addEventListener("click", () => this.sendSocketNotification("SPOTIFY_SKIP", { direction: "next" }));
+    controls.appendChild(nextBtn);
+
+    return controls;
+  },
+
+  _renderOverlayBody() {
+    if (!this._overlayBodyEl) return;
+    this._overlayBodyEl.innerHTML = "";
+    this._overlayBodyEl.appendChild(this._buildDevicePicker());
+    this._overlayBodyEl.appendChild(this._buildNowPlayingControls());
   },
 
   getDom() {
