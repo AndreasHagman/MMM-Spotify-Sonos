@@ -1,0 +1,17 @@
+{
+  "name": "mmm-spotify-sonos",
+  "version": "1.0.0",
+  "description": "MagicMirror² module: search Spotify, queue tracks/playlists, and choose which Spotify Connect device (e.g. a Sonos speaker/group) they play on.",
+  "main": "MMM-Spotify-Sonos.js",
+  "scripts": {
+    "test": "node --test test/**/*.test.js",
+    "lint": "eslint *.js test/*.js"
+  },
+  "keywords": ["magicmirror", "spotify", "sonos", "music"],
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "globals": "^17.9.0"
+  }
+}
