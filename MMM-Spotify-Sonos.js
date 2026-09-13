@@ -6,7 +6,7 @@ Module.register("MMM-Spotify-Sonos", {
     redirectUri: "http://127.0.0.1:8888/callback",
     pollInterval: 7000,
     searchDebounce: 450,
-    maxSearchResults: 12
+    maxSearchResults: 10
   },
 
   start() {
@@ -25,7 +25,7 @@ Module.register("MMM-Spotify-Sonos", {
   },
 
   getStyles() {
-    return ["MMM-Spotify-Sonos.css"];
+    return [this.file("css/MMM-Spotify-Sonos.css")];
   },
 
   getTranslations() {
@@ -47,8 +47,11 @@ Module.register("MMM-Spotify-Sonos", {
         window.open(payload.url, "SpotifyLogin", "width=500,height=700");
         break;
       case "SPOTIFY_PLAYBACK_STATE":
-        // A fresh successful state update means whatever went wrong has passed.
-        this.lastError = null;
+        // Deliberately does NOT clear lastError: this fires on every poll tick
+        // (every pollInterval, unrelated to any user action), so clearing it here
+        // made real errors vanish on their own before anyone could read them.
+        // An error only clears when the specific action that caused it succeeds
+        // (see the SPOTIFY_DEVICES_RESULT/SPOTIFY_SEARCH_RESULT cases below).
         this.playback = payload;
         this.updateDom();
         this._renderNowPlayingControls();
@@ -393,7 +396,7 @@ Module.register("MMM-Spotify-Sonos", {
 
     const playBtn = document.createElement("button");
     playBtn.type = "button";
-    playBtn.className = "mmm-spotify-sonos__result-action";
+    playBtn.className = "mmm-spotify-sonos__result-action mmm-spotify-sonos__result-action--primary";
     playBtn.innerText = this.translate("PLAY_NOW");
     playBtn.addEventListener("click", () => this._handlePlayNow(item));
     actions.appendChild(playBtn);
@@ -436,6 +439,7 @@ Module.register("MMM-Spotify-Sonos", {
     section.innerHTML = "";
 
     const tracksHeading = document.createElement("h3");
+    tracksHeading.className = "mmm-spotify-sonos__section-heading";
     tracksHeading.innerText = this.translate("TRACKS");
     section.appendChild(tracksHeading);
     const tracksRow = document.createElement("div");
@@ -444,6 +448,7 @@ Module.register("MMM-Spotify-Sonos", {
     section.appendChild(tracksRow);
 
     const playlistsHeading = document.createElement("h3");
+    playlistsHeading.className = "mmm-spotify-sonos__section-heading";
     playlistsHeading.innerText = this.translate("PLAYLISTS");
     section.appendChild(playlistsHeading);
     const playlistsRow = document.createElement("div");
@@ -462,6 +467,7 @@ Module.register("MMM-Spotify-Sonos", {
     if (items.length === 0) return;
 
     const heading = document.createElement("h3");
+    heading.className = "mmm-spotify-sonos__section-heading";
     heading.innerText = this.translate("UP_NEXT");
     section.appendChild(heading);
 

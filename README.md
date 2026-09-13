@@ -45,6 +45,22 @@ To switch accounts, use the **Log out** button in the overlay header:
 it deletes the stored token file and returns the module to the "Log in
 with Spotify" state, ready for a different account.
 
+## Known quirks
+
+- **No devices showing up?** Spotify Connect only lists a device once
+  it's been recently active. If the device picker says "No Spotify
+  Connect devices found," open the Spotify app on your phone (or start
+  playing something via Spotify Connect to a Sonos speaker from there)
+  at least once — it should then appear here too. This isn't something
+  this module can fix; it's how Spotify Connect discovery works.
+- **Search limit:** this module's Spotify app currently has its
+  `/v1/search` `limit` parameter capped at 10 by Spotify (values above
+  that return a 400 "Invalid limit"), tighter than the 1-50 range
+  Spotify's docs describe for apps with extended access. `node_helper.js`
+  clamps to 10 regardless of `maxSearchResults`, so this shouldn't
+  surface as an error — just a note if you're wondering why results are
+  capped lower than you configured.
+
 ## Config options
 
 | Option             | Default                          | Description                                  |
@@ -53,7 +69,7 @@ with Spotify" state, ready for a different account.
 | `redirectUri`      | `http://127.0.0.1:8888/callback` | Must match the app's registered Redirect URI |
 | `pollInterval`     | `7000`                           | How often (ms) now-playing state is polled   |
 | `searchDebounce`   | `450`                            | Live-search debounce (ms)                    |
-| `maxSearchResults` | `12`                             | Max results per section (tracks/playlists)   |
+| `maxSearchResults` | `10`                             | Max results per section (tracks/playlists) — see "Search limit" above |
 
 ## Scope
 

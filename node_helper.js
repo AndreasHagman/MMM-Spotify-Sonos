@@ -73,7 +73,7 @@ module.exports = NodeHelper.create({
         redirectUri: DEFAULT_REDIRECT_URI,
         pollInterval: 7000,
         searchDebounce: 450,
-        maxSearchResults: 12
+        maxSearchResults: 10
       },
       config
     );
@@ -249,7 +249,7 @@ module.exports = NodeHelper.create({
 
   async _fetchProfile() {
     const response = await this._spotifyFetch("/v1/me");
-    if (!response.ok) throw new Error(`Failed to fetch profile: ${response.status}`);
+    if (!response.ok) throw new Error(`${response.status}`);
     const json = await response.json();
     this.profile = {
       id: json.id,
@@ -282,7 +282,7 @@ module.exports = NodeHelper.create({
         this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null });
         return;
       }
-      if (!response.ok) throw new Error(`Playback state request failed: ${response.status}`);
+      if (!response.ok) throw new Error(`${response.status}`);
       const json = await response.json();
       this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", shapePlaybackState(json));
     } catch (err) {
@@ -301,7 +301,7 @@ module.exports = NodeHelper.create({
         this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { currentlyPlaying: null, queue: [] });
         return;
       }
-      if (!response.ok) throw new Error(`Queue request failed: ${response.status}`);
+      if (!response.ok) throw new Error(`${response.status}`);
       const json = await response.json();
       this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", shapeQueueResponse(json));
     } catch (err) {
@@ -317,13 +317,19 @@ module.exports = NodeHelper.create({
     }
 
     const limit = this.config.maxSearchResults;
+    // This app's current Spotify access level caps /v1/search's limit param at 10
+    // (empirically verified — values above 10 return 400 "Invalid limit"), tighter
+    // than Spotify's documented 1-50 range. Clamp defensively regardless of config
+    // so a higher maxSearchResults doesn't just break search outright; the own-
+    // playlist merge below still uses the full configured limit.
+    const searchLimit = Math.min(limit, 10);
     try {
       const [searchResponse, ownPlaylistsResponse] = await Promise.all([
-        this._spotifyFetch(`/v1/search?q=${encodeURIComponent(query)}&type=track,playlist&limit=${limit}`),
+        this._spotifyFetch(`/v1/search?q=${encodeURIComponent(query)}&type=track,playlist&limit=${searchLimit}`),
         this._spotifyFetch("/v1/me/playlists?limit=50")
       ]);
 
-      if (!searchResponse.ok) throw new Error(`Search failed: ${searchResponse.status}`);
+      if (!searchResponse.ok) throw new Error(`${searchResponse.status}`);
       const shaped = shapeSearchResults(await searchResponse.json());
 
       let ownMatches = [];
@@ -341,7 +347,7 @@ module.exports = NodeHelper.create({
   async _getDevices() {
     try {
       const response = await this._spotifyFetch("/v1/me/player/devices");
-      if (!response.ok) throw new Error(`Devices request failed: ${response.status}`);
+      if (!response.ok) throw new Error(`${response.status}`);
       const json = await response.json();
       this.sendSocketNotification("SPOTIFY_DEVICES_RESULT", { devices: shapeDevices(json) });
     } catch (err) {
@@ -355,7 +361,7 @@ module.exports = NodeHelper.create({
         method: "PUT",
         body: JSON.stringify({ device_ids: [deviceId], play: false })
       });
-      if (!response.ok && response.status !== 204) throw new Error(`Transfer failed: ${response.status}`);
+      if (!response.ok && response.status !== 204) throw new Error(`${response.status}`);
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not switch speaker: ${err.message}` });
     }
@@ -368,7 +374,7 @@ module.exports = NodeHelper.create({
         method: "PUT",
         body: JSON.stringify(body)
       });
-      if (!response.ok && response.status !== 204) throw new Error(`Play failed: ${response.status}`);
+      if (!response.ok && response.status !== 204) throw new Error(`${response.status}`);
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not start playback: ${err.message}` });
     }
@@ -383,7 +389,7 @@ module.exports = NodeHelper.create({
         this.sendSocketNotification("SPOTIFY_ERROR", { message: "No active speaker — pick one first" });
         return;
       }
-      if (!response.ok && response.status !== 204) throw new Error(`Queue add failed: ${response.status}`);
+      if (!response.ok && response.status !== 204) throw new Error(`${response.status}`);
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not add to queue: ${err.message}` });
     }
@@ -393,7 +399,7 @@ module.exports = NodeHelper.create({
     try {
       const endpoint = isPlaying ? "/v1/me/player/pause" : "/v1/me/player/play";
       const response = await this._spotifyFetch(endpoint, { method: "PUT" });
-      if (!response.ok && response.status !== 204) throw new Error(`Play/pause failed: ${response.status}`);
+      if (!response.ok && response.status !== 204) throw new Error(`${response.status}`);
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not toggle playback: ${err.message}` });
     }
@@ -403,7 +409,7 @@ module.exports = NodeHelper.create({
     try {
       const endpoint = direction === "previous" ? "/v1/me/player/previous" : "/v1/me/player/next";
       const response = await this._spotifyFetch(endpoint, { method: "POST" });
-      if (!response.ok && response.status !== 204) throw new Error(`Skip failed: ${response.status}`);
+      if (!response.ok && response.status !== 204) throw new Error(`${response.status}`);
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not skip: ${err.message}` });
     }
