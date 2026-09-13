@@ -5,6 +5,7 @@ const Log = require("logger");
 const path = require("node:path");
 const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshAccessToken, generateCodeVerifier, generateCodeChallenge, generateState, buildAuthorizeUrl, exchangeCodeForTokens, startCallbackServer } = require("./spotify-auth");
 const { spotifyRequest } = require("./spotify-request");
+const { shapePlaybackState } = require("./spotify-shape");
 
 const DEFAULT_REDIRECT_URI = "http://localhost:8888/callback";
 const SCOPES = ["user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "playlist-read-private", "playlist-read-collaborative"];
@@ -184,6 +185,23 @@ module.exports = NodeHelper.create({
   },
 
   _startPolling() {
-    // Implemented in Task 8 — placeholder no-op so _handleCallback above has something to call.
+    this._stopPolling();
+    this._pollPlaybackState();
+    this.pollTimer = setInterval(() => this._pollPlaybackState(), this.config.pollInterval);
+  },
+
+  async _pollPlaybackState() {
+    try {
+      const response = await this._spotifyFetch("/v1/me/player");
+      if (response.status === 204) {
+        this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null });
+        return;
+      }
+      if (!response.ok) throw new Error(`Playback state request failed: ${response.status}`);
+      const json = await response.json();
+      this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", shapePlaybackState(json));
+    } catch (err) {
+      Log.error(`[MMM-Spotify-Sonos] Failed to poll playback state: ${err.message}`);
+    }
   }
 });
