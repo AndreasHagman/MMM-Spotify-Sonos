@@ -19,6 +19,7 @@ Module.register("MMM-Spotify-Sonos", {
     this.activeDeviceId = null;
     this._overlayEl = null;
     this.searchResults = { tracks: [], playlists: [] };
+    this.queue = { currentlyPlaying: null, queue: [] };
     this._searchDebounceTimer = null;
     this.sendSocketNotification("SPOTIFY_CONFIG", this.config);
   },
@@ -39,33 +40,57 @@ Module.register("MMM-Spotify-Sonos", {
       case "SPOTIFY_AUTH_STATE":
         this.loggedIn = payload.loggedIn;
         this.profile = payload.profile;
+        if (payload.loggedIn === false) this._resetAccountState();
         this.updateDom();
         break;
       case "SPOTIFY_AUTH_URL":
         window.open(payload.url, "SpotifyLogin", "width=500,height=700");
         break;
       case "SPOTIFY_PLAYBACK_STATE":
+        // A fresh successful state update means whatever went wrong has passed.
+        this.lastError = null;
         this.playback = payload;
         this.updateDom();
+        this._renderNowPlayingControls();
+        this._renderError();
         break;
       case "SPOTIFY_ERROR":
         this.lastError = payload.message;
         Log.error(`[MMM-Spotify-Sonos] ${payload.message}`);
         this.updateDom();
+        this._renderError();
         break;
       case "SPOTIFY_DEVICES_RESULT":
+        this.lastError = null;
         this.devices = payload.devices;
         if (!this.activeDeviceId) {
           const active = this.devices.find((d) => d.isActive);
           if (active) this.activeDeviceId = active.id;
         }
-        this._renderOverlayBody();
+        this._renderDevicePicker();
+        this._renderError();
         break;
       case "SPOTIFY_SEARCH_RESULT":
+        this.lastError = null;
         this.searchResults = payload;
-        this._renderOverlayBody();
+        this._renderResults();
+        this._renderError();
+        break;
+      case "SPOTIFY_QUEUE_RESULT":
+        this.queue = payload;
+        this._renderQueue();
         break;
     }
+  },
+
+  // Everything tied to the account that just went away, so a login by a different
+  // account can't show the previous session's devices/results/queue.
+  _resetAccountState() {
+    this._closeOverlay();
+    this.devices = [];
+    this.activeDeviceId = null;
+    this.searchResults = { tracks: [], playlists: [] };
+    this.queue = { currentlyPlaying: null, queue: [] };
   },
 
   _debouncedSearch(query) {
@@ -194,6 +219,35 @@ Module.register("MMM-Spotify-Sonos", {
     body.className = "mmm-spotify-sonos__overlay-body";
     sheet.appendChild(body);
 
+    // Stable sub-containers, built exactly once per overlay-open. Each is re-rendered
+    // independently by its own _renderX() so that nothing — the search input above
+    // all — gets destroyed just because some other part of the overlay updated.
+    this._devicePickerEl = document.createElement("div");
+    this._devicePickerEl.className = "mmm-spotify-sonos__device-picker";
+    body.appendChild(this._devicePickerEl);
+
+    this._nowPlayingControlsEl = document.createElement("div");
+    this._nowPlayingControlsEl.className = "mmm-spotify-sonos__overlay-controls";
+    body.appendChild(this._nowPlayingControlsEl);
+
+    // Created once and never rebuilt, so typing (focus, caret, keyboard) survives
+    // search results arriving.
+    this._searchInputEl = this._buildSearchBox();
+    body.appendChild(this._searchInputEl);
+
+    this._errorEl = document.createElement("div");
+    this._errorEl.className = "mmm-spotify-sonos__overlay-error";
+    this._errorEl.hidden = true;
+    body.appendChild(this._errorEl);
+
+    this._queueEl = document.createElement("div");
+    this._queueEl.className = "mmm-spotify-sonos__queue";
+    body.appendChild(this._queueEl);
+
+    this._resultsEl = document.createElement("div");
+    this._resultsEl.className = "mmm-spotify-sonos__results";
+    body.appendChild(this._resultsEl);
+
     backdrop.appendChild(sheet);
     document.body.appendChild(backdrop);
 
@@ -201,7 +255,11 @@ Module.register("MMM-Spotify-Sonos", {
     this._overlayBodyEl = body;
 
     this.sendSocketNotification("SPOTIFY_DEVICES_REQUEST");
-    this._renderOverlayBody();
+    this._renderDevicePicker();
+    this._renderNowPlayingControls();
+    this._renderError();
+    this._renderQueue();
+    this._renderResults();
   },
 
   _closeOverlay() {
@@ -210,12 +268,20 @@ Module.register("MMM-Spotify-Sonos", {
       this._overlayEl.remove();
       this._overlayEl = null;
       this._overlayBodyEl = null;
+      this._devicePickerEl = null;
+      this._nowPlayingControlsEl = null;
+      this._searchInputEl = null;
+      this._deviceListEl = null;
+      this._errorEl = null;
+      this._queueEl = null;
+      this._resultsEl = null;
     }
   },
 
-  _buildDevicePicker() {
-    const container = document.createElement("div");
-    container.className = "mmm-spotify-sonos__device-picker";
+  _renderDevicePicker() {
+    if (!this._devicePickerEl) return;
+    const container = this._devicePickerEl;
+    container.innerHTML = "";
 
     const activeDevice = this.devices.find((d) => d.id === this.activeDeviceId);
     const toggle = document.createElement("button");
@@ -243,7 +309,7 @@ Module.register("MMM-Spotify-Sonos", {
         this.activeDeviceId = device.id;
         this.sendSocketNotification("SPOTIFY_TRANSFER", { deviceId: device.id });
         list.hidden = true;
-        this._renderOverlayBody();
+        this._renderDevicePicker();
       });
       list.appendChild(item);
     });
@@ -254,12 +320,13 @@ Module.register("MMM-Spotify-Sonos", {
 
     container.appendChild(toggle);
     container.appendChild(list);
-    return container;
+    this._deviceListEl = list;
   },
 
-  _buildNowPlayingControls() {
-    const controls = document.createElement("div");
-    controls.className = "mmm-spotify-sonos__overlay-controls";
+  _renderNowPlayingControls() {
+    if (!this._nowPlayingControlsEl) return;
+    const controls = this._nowPlayingControlsEl;
+    controls.innerHTML = "";
 
     const prevBtn = document.createElement("button");
     prevBtn.type = "button";
@@ -277,7 +344,7 @@ Module.register("MMM-Spotify-Sonos", {
       // Optimistic flip — SPOTIFY_PLAYBACK_STATE will correct it on the next poll tick.
       this.playback = { ...this.playback, isPlaying: !isPlaying };
       this.sendSocketNotification("SPOTIFY_PLAYPAUSE", { isPlaying });
-      this._renderOverlayBody();
+      this._renderNowPlayingControls();
     });
     controls.appendChild(playPauseBtn);
 
@@ -287,8 +354,6 @@ Module.register("MMM-Spotify-Sonos", {
     nextBtn.innerText = "⏭";
     nextBtn.addEventListener("click", () => this.sendSocketNotification("SPOTIFY_SKIP", { direction: "next" }));
     controls.appendChild(nextBtn);
-
-    return controls;
   },
 
   _buildSearchBox() {
@@ -333,12 +398,16 @@ Module.register("MMM-Spotify-Sonos", {
     playBtn.addEventListener("click", () => this._handlePlayNow(item));
     actions.appendChild(playBtn);
 
-    const queueBtn = document.createElement("button");
-    queueBtn.type = "button";
-    queueBtn.className = "mmm-spotify-sonos__result-action";
-    queueBtn.innerText = this.translate("ADD_TO_QUEUE");
-    queueBtn.addEventListener("click", () => this._handleQueueAdd(item));
-    actions.appendChild(queueBtn);
+    // Spotify's queue endpoint only accepts track/episode URIs — offering
+    // "Add to queue" on a playlist would just guarantee a failure.
+    if (item.type === "track") {
+      const queueBtn = document.createElement("button");
+      queueBtn.type = "button";
+      queueBtn.className = "mmm-spotify-sonos__result-action";
+      queueBtn.innerText = this.translate("ADD_TO_QUEUE");
+      queueBtn.addEventListener("click", () => this._handleQueueAdd(item));
+      actions.appendChild(queueBtn);
+    }
 
     tile.appendChild(actions);
     return tile;
@@ -346,8 +415,7 @@ Module.register("MMM-Spotify-Sonos", {
 
   _handlePlayNow(item) {
     if (!this.activeDeviceId) {
-      const picker = this._overlayBodyEl?.querySelector(".mmm-spotify-sonos__device-picker-list");
-      if (picker) picker.hidden = false;
+      if (this._deviceListEl) this._deviceListEl.hidden = false;
       return;
     }
     this.sendSocketNotification("SPOTIFY_PLAY_NOW", { deviceId: this.activeDeviceId, uri: item.uri, type: item.type });
@@ -356,15 +424,16 @@ Module.register("MMM-Spotify-Sonos", {
   _handleQueueAdd(item) {
     if (!this.activeDeviceId) {
       this.lastError = this.translate("NO_ACTIVE_SPEAKER");
-      this._renderOverlayBody();
+      this._renderError();
       return;
     }
     this.sendSocketNotification("SPOTIFY_QUEUE_ADD", { uri: item.uri, deviceId: this.activeDeviceId });
   },
 
-  _buildResultsSection() {
-    const section = document.createElement("div");
-    section.className = "mmm-spotify-sonos__results";
+  _renderResults() {
+    if (!this._resultsEl) return;
+    const section = this._resultsEl;
+    section.innerHTML = "";
 
     const tracksHeading = document.createElement("h3");
     tracksHeading.innerText = this.translate("TRACKS");
@@ -381,25 +450,46 @@ Module.register("MMM-Spotify-Sonos", {
     playlistsRow.className = "mmm-spotify-sonos__results-row";
     this.searchResults.playlists.forEach((playlist) => playlistsRow.appendChild(this._buildResultTile(playlist)));
     section.appendChild(playlistsRow);
-
-    return section;
   },
 
-  _renderOverlayBody() {
-    if (!this._overlayBodyEl) return;
-    this._overlayBodyEl.innerHTML = "";
-    this._overlayBodyEl.appendChild(this._buildDevicePicker());
-    this._overlayBodyEl.appendChild(this._buildNowPlayingControls());
-    this._overlayBodyEl.appendChild(this._buildSearchBox());
+  _renderQueue() {
+    if (!this._queueEl) return;
+    const section = this._queueEl;
+    section.innerHTML = "";
 
-    if (this.lastError) {
-      const errorEl = document.createElement("div");
-      errorEl.className = "mmm-spotify-sonos__overlay-error";
-      errorEl.innerText = this.lastError;
-      this._overlayBodyEl.appendChild(errorEl);
-    }
+    const items = this.queue?.queue || [];
+    section.hidden = items.length === 0;
+    if (items.length === 0) return;
 
-    this._overlayBodyEl.appendChild(this._buildResultsSection());
+    const heading = document.createElement("h3");
+    heading.innerText = this.translate("UP_NEXT");
+    section.appendChild(heading);
+
+    const list = document.createElement("div");
+    list.className = "mmm-spotify-sonos__queue-list";
+    items.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "mmm-spotify-sonos__queue-row";
+
+      const name = document.createElement("span");
+      name.className = "mmm-spotify-sonos__queue-name";
+      name.innerText = item.name || "";
+      row.appendChild(name);
+
+      const artist = document.createElement("span");
+      artist.className = "mmm-spotify-sonos__queue-artist";
+      artist.innerText = item.artist || "";
+      row.appendChild(artist);
+
+      list.appendChild(row);
+    });
+    section.appendChild(list);
+  },
+
+  _renderError() {
+    if (!this._errorEl) return;
+    this._errorEl.innerText = this.lastError || "";
+    this._errorEl.hidden = !this.lastError;
   },
 
   getDom() {

@@ -225,3 +225,33 @@
   padding: 0.5rem 0.75rem;
   font-size: 0.9em;
 }
+
+.mmm-spotify-sonos__overlay-error[hidden],
+.mmm-spotify-sonos__queue[hidden] {
+  display: none;
+}
+
+.mmm-spotify-sonos__queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.mmm-spotify-sonos__queue-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 0.35rem 0.6rem;
+}
+
+.mmm-spotify-sonos__queue-name {
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+.mmm-spotify-sonos__queue-artist {
+  font-size: 0.8em;
+  opacity: 0.75;
+}
