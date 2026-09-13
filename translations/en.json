@@ -1,0 +1,15 @@
+{
+  "LOG_IN_WITH_SPOTIFY": "Log in with Spotify",
+  "LOG_OUT": "Log out",
+  "NOTHING_PLAYING": "Nothing playing",
+  "CLOSE": "Close",
+  "SEARCH_PLACEHOLDER": "Search tracks or playlists…",
+  "TRACKS": "Tracks",
+  "PLAYLISTS": "Playlists",
+  "PLAY_NOW": "Play now",
+  "ADD_TO_QUEUE": "Add to queue",
+  "UP_NEXT": "Up next",
+  "PLAYING_ON": "Playing on",
+  "NO_ACTIVE_SPEAKER": "No active speaker — pick one first",
+  "NO_DEVICES_FOUND": "No Spotify Connect devices found"
+}

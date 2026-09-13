@@ -1,0 +1,15 @@
+{
+  "LOG_IN_WITH_SPOTIFY": "Logg inn med Spotify",
+  "LOG_OUT": "Logg ut",
+  "NOTHING_PLAYING": "Ingenting spiller",
+  "CLOSE": "Lukk",
+  "SEARCH_PLACEHOLDER": "Søk etter låter eller spillelister…",
+  "TRACKS": "Låter",
+  "PLAYLISTS": "Spillelister",
+  "PLAY_NOW": "Spill nå",
+  "ADD_TO_QUEUE": "Legg i kø",
+  "UP_NEXT": "Neste opp",
+  "PLAYING_ON": "Spiller på",
+  "NO_ACTIVE_SPEAKER": "Ingen aktiv høyttaler — velg en først",
+  "NO_DEVICES_FOUND": "Fant ingen Spotify Connect-enheter"
+}
