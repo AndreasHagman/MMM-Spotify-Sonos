@@ -145,10 +145,14 @@ module.exports = NodeHelper.create({
   },
 
   async _refreshTokens() {
-    this.tokens = await refreshAccessToken(fetch, {
+    const refreshed = await refreshAccessToken(fetch, {
       refreshToken: this.tokens.refreshToken,
       clientId: this.config.clientId
     });
+    // A logout (or an auth failure on another request) while this was in flight wins —
+    // don't resurrect the session or re-create the token file we just deleted.
+    if (!this.tokens) throw new Error("Not logged in");
+    this.tokens = refreshed;
     writeTokenFile(this._tokenFilePath(), this.tokens);
     return this.tokens;
   },
