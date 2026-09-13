@@ -5,7 +5,7 @@ const Log = require("logger");
 const path = require("node:path");
 const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshAccessToken, generateCodeVerifier, generateCodeChallenge, generateState, buildAuthorizeUrl, exchangeCodeForTokens, startCallbackServer } = require("./spotify-auth");
 const { spotifyRequest } = require("./spotify-request");
-const { shapePlaybackState } = require("./spotify-shape");
+const { shapePlaybackState, shapeSearchResults, shapeOwnPlaylists, mergePlaylists } = require("./spotify-shape");
 
 const DEFAULT_REDIRECT_URI = "http://localhost:8888/callback";
 const SCOPES = ["user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "playlist-read-private", "playlist-read-collaborative"];
@@ -38,6 +38,9 @@ module.exports = NodeHelper.create({
         break;
       case "SPOTIFY_LOGOUT":
         this._logout();
+        break;
+      case 'SPOTIFY_SEARCH':
+        this._search(payload || {});
         break;
     }
   },
@@ -202,6 +205,34 @@ module.exports = NodeHelper.create({
       this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", shapePlaybackState(json));
     } catch (err) {
       Log.error(`[MMM-Spotify-Sonos] Failed to poll playback state: ${err.message}`);
+    }
+  },
+
+  async _search({ query }) {
+    if (!query || !query.trim()) {
+      this.sendSocketNotification("SPOTIFY_SEARCH_RESULT", { tracks: [], playlists: [] });
+      return;
+    }
+
+    const limit = this.config.maxSearchResults;
+    try {
+      const [searchResponse, ownPlaylistsResponse] = await Promise.all([
+        this._spotifyFetch(`/v1/search?q=${encodeURIComponent(query)}&type=track,playlist&limit=${limit}`),
+        this._spotifyFetch("/v1/me/playlists?limit=50")
+      ]);
+
+      if (!searchResponse.ok) throw new Error(`Search failed: ${searchResponse.status}`);
+      const shaped = shapeSearchResults(await searchResponse.json());
+
+      let ownMatches = [];
+      if (ownPlaylistsResponse.ok) {
+        ownMatches = shapeOwnPlaylists(await ownPlaylistsResponse.json(), query);
+      }
+
+      const playlists = mergePlaylists(ownMatches, shaped.playlists, limit);
+      this.sendSocketNotification("SPOTIFY_SEARCH_RESULT", { tracks: shaped.tracks, playlists });
+    } catch (err) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Search failed: ${err.message}` });
     }
   }
 });
