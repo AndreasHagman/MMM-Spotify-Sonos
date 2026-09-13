@@ -5,7 +5,7 @@ const Log = require("logger");
 const path = require("node:path");
 const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshAccessToken, generateCodeVerifier, generateCodeChallenge, generateState, buildAuthorizeUrl, exchangeCodeForTokens, startCallbackServer } = require("./spotify-auth");
 const { spotifyRequest } = require("./spotify-request");
-const { shapePlaybackState, shapeSearchResults, shapeOwnPlaylists, mergePlaylists } = require("./spotify-shape");
+const { shapePlaybackState, shapeSearchResults, shapeOwnPlaylists, mergePlaylists, shapeDevices } = require("./spotify-shape");
 
 const DEFAULT_REDIRECT_URI = "http://localhost:8888/callback";
 const SCOPES = ["user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "playlist-read-private", "playlist-read-collaborative"];
@@ -41,6 +41,24 @@ module.exports = NodeHelper.create({
         break;
       case 'SPOTIFY_SEARCH':
         this._search(payload || {});
+        break;
+      case "SPOTIFY_DEVICES_REQUEST":
+        this._getDevices();
+        break;
+      case "SPOTIFY_TRANSFER":
+        this._transfer(payload || {});
+        break;
+      case "SPOTIFY_PLAY_NOW":
+        this._playNow(payload || {});
+        break;
+      case "SPOTIFY_QUEUE_ADD":
+        this._queueAdd(payload || {});
+        break;
+      case "SPOTIFY_PLAYPAUSE":
+        this._playPause(payload || {});
+        break;
+      case "SPOTIFY_SKIP":
+        this._skip(payload || {});
         break;
     }
   },
@@ -233,6 +251,77 @@ module.exports = NodeHelper.create({
       this.sendSocketNotification("SPOTIFY_SEARCH_RESULT", { tracks: shaped.tracks, playlists });
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Search failed: ${err.message}` });
+    }
+  },
+
+  async _getDevices() {
+    try {
+      const response = await this._spotifyFetch("/v1/me/player/devices");
+      if (!response.ok) throw new Error(`Devices request failed: ${response.status}`);
+      const json = await response.json();
+      this.sendSocketNotification("SPOTIFY_DEVICES_RESULT", { devices: shapeDevices(json) });
+    } catch (err) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not load devices: ${err.message}` });
+    }
+  },
+
+  async _transfer({ deviceId }) {
+    try {
+      const response = await this._spotifyFetch("/v1/me/player", {
+        method: "PUT",
+        body: JSON.stringify({ device_ids: [deviceId], play: false })
+      });
+      if (!response.ok && response.status !== 204) throw new Error(`Transfer failed: ${response.status}`);
+    } catch (err) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not switch speaker: ${err.message}` });
+    }
+  },
+
+  async _playNow({ deviceId, uri, type }) {
+    try {
+      const body = type === "playlist" ? { context_uri: uri } : { uris: [uri] };
+      const response = await this._spotifyFetch(`/v1/me/player/play?device_id=${encodeURIComponent(deviceId)}`, {
+        method: "PUT",
+        body: JSON.stringify(body)
+      });
+      if (!response.ok && response.status !== 204) throw new Error(`Play failed: ${response.status}`);
+    } catch (err) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not start playback: ${err.message}` });
+    }
+  },
+
+  async _queueAdd({ uri, deviceId }) {
+    try {
+      let requestPath = `/v1/me/player/queue?uri=${encodeURIComponent(uri)}`;
+      if (deviceId) requestPath += `&device_id=${encodeURIComponent(deviceId)}`;
+      const response = await this._spotifyFetch(requestPath, { method: "POST" });
+      if (response.status === 404) {
+        this.sendSocketNotification("SPOTIFY_ERROR", { message: "No active speaker — pick one first" });
+        return;
+      }
+      if (!response.ok && response.status !== 204) throw new Error(`Queue add failed: ${response.status}`);
+    } catch (err) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not add to queue: ${err.message}` });
+    }
+  },
+
+  async _playPause({ isPlaying }) {
+    try {
+      const endpoint = isPlaying ? "/v1/me/player/pause" : "/v1/me/player/play";
+      const response = await this._spotifyFetch(endpoint, { method: "PUT" });
+      if (!response.ok && response.status !== 204) throw new Error(`Play/pause failed: ${response.status}`);
+    } catch (err) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not toggle playback: ${err.message}` });
+    }
+  },
+
+  async _skip({ direction }) {
+    try {
+      const endpoint = direction === "previous" ? "/v1/me/player/previous" : "/v1/me/player/next";
+      const response = await this._spotifyFetch(endpoint, { method: "POST" });
+      if (!response.ok && response.status !== 204) throw new Error(`Skip failed: ${response.status}`);
+    } catch (err) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not skip: ${err.message}` });
     }
   }
 });
