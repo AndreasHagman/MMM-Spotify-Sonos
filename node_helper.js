@@ -3,10 +3,11 @@
 const NodeHelper = require("node_helper");
 const Log = require("logger");
 const path = require("node:path");
-const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshAccessToken } = require("./spotify-auth");
+const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshAccessToken, generateCodeVerifier, generateCodeChallenge, generateState, buildAuthorizeUrl, exchangeCodeForTokens, startCallbackServer } = require("./spotify-auth");
 const { spotifyRequest } = require("./spotify-request");
 
 const DEFAULT_REDIRECT_URI = "http://localhost:8888/callback";
+const SCOPES = ["user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "playlist-read-private", "playlist-read-collaborative"];
 
 module.exports = NodeHelper.create({
   start() {
@@ -31,6 +32,12 @@ module.exports = NodeHelper.create({
       case "SPOTIFY_CONFIG":
         this._configure(payload || {});
         break;
+      case "SPOTIFY_LOGIN_START":
+        this._startLogin();
+        break;
+      case "SPOTIFY_LOGOUT":
+        this._logout();
+        break;
     }
   },
 
@@ -52,6 +59,8 @@ module.exports = NodeHelper.create({
 
     try {
       await this._getAccessToken();
+      await this._fetchProfile();
+      this._startPolling();
       this.sendSocketNotification("SPOTIFY_AUTH_STATE", { loggedIn: true, profile: this.profile });
     } catch (err) {
       Log.error(`[MMM-Spotify-Sonos] Stored token is no longer valid: ${err.message}`);
@@ -94,5 +103,87 @@ module.exports = NodeHelper.create({
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+  },
+
+  async _startLogin() {
+    if (!this.config.clientId) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: "Missing clientId in config" });
+      return;
+    }
+
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+    const state = generateState();
+    const redirectUri = this.config.redirectUri;
+    const port = Number(new URL(redirectUri).port) || 8888;
+
+    try {
+      this.authServer = await startCallbackServer(port, (result) =>
+        this._handleCallback(result, codeVerifier, state, redirectUri)
+      );
+    } catch (err) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not start OAuth callback server: ${err.message}` });
+      return;
+    }
+
+    const authorizeUrl = buildAuthorizeUrl({
+      clientId: this.config.clientId,
+      redirectUri,
+      codeChallenge,
+      state,
+      scopes: SCOPES
+    });
+    this.sendSocketNotification("SPOTIFY_AUTH_URL", { url: authorizeUrl });
+  },
+
+  async _handleCallback({ code, state, error }, expectedVerifier, expectedState, redirectUri) {
+    if (this.authServer) {
+      this.authServer.close();
+      this.authServer = null;
+    }
+
+    if (error || !code || state !== expectedState) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Spotify login failed: ${error || "state mismatch"}` });
+      return;
+    }
+
+    try {
+      this.tokens = await exchangeCodeForTokens(fetch, {
+        code,
+        codeVerifier: expectedVerifier,
+        redirectUri,
+        clientId: this.config.clientId
+      });
+      writeTokenFile(this._tokenFilePath(), this.tokens);
+      await this._fetchProfile();
+      this._startPolling();
+      this.sendSocketNotification("SPOTIFY_AUTH_STATE", { loggedIn: true, profile: this.profile });
+    } catch (err) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Token exchange failed: ${err.message}` });
+    }
+  },
+
+  async _fetchProfile() {
+    const response = await this._spotifyFetch("/v1/me");
+    if (!response.ok) throw new Error(`Failed to fetch profile: ${response.status}`);
+    const json = await response.json();
+    this.profile = {
+      id: json.id,
+      displayName: json.display_name || json.id,
+      avatarUrl: json.images?.[0]?.url || null
+    };
+    return this.profile;
+  },
+
+  _logout() {
+    this._stopPolling();
+    this.tokens = null;
+    this.profile = null;
+    deleteTokenFile(this._tokenFilePath());
+    this.sendSocketNotification("SPOTIFY_AUTH_STATE", { loggedIn: false, profile: null });
+  },
+
+  _startPolling() {
+    // Implemented in Task 8 — placeholder no-op so _handleCallback above has something to call.
   }
 });
