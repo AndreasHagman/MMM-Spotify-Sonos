@@ -5,7 +5,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const http = require("node:http");
 
 const { generateCodeVerifier, generateCodeChallenge, generateState, isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, buildAuthorizeUrl, exchangeCodeForTokens, refreshAccessToken, startCallbackServer } = require("../spotify-auth");
 

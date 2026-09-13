@@ -34,7 +34,8 @@ module.exports = [
       globals: {
         ...globals.browser,
         ...globals.es2021,
-        Module: "readonly"
+        Module: "readonly",
+        Log: "readonly"
       }
     }
   },

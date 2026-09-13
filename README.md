@@ -4,6 +4,13 @@ Search Spotify for tracks and playlists, play them now or add them to
 the queue, and pick which Spotify Connect device (e.g. a Sonos speaker
 or speaker group) they play on.
 
+## Requirements
+
+A **Spotify Premium** account is required. Spotify Connect device
+transfer and the Web API's playback-control endpoints (play, pause,
+skip, add-to-queue) are Premium-only, so this module will not work on a
+free account.
+
 ## Setup
 
 1. Create a Spotify Developer app at
@@ -26,6 +33,14 @@ or speaker group) they play on.
 4. Start MagicMirror, tap the Spotify icon, and log in. Tokens are
    stored in `spotify_access_token.json` next to `node_helper.js`
    (gitignored) and refreshed automatically.
+
+`clientId` must be set in `config.js` before the "Log in with Spotify"
+button will do anything — without it the login attempt reports a
+"Missing clientId in config" error instead of opening Spotify.
+
+To switch accounts, use the **Log out** button in the overlay header:
+it deletes the stored token file and returns the module to the "Log in
+with Spotify" state, ready for a different account.
 
 ## Config options
 

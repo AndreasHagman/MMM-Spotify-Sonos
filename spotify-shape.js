@@ -5,7 +5,7 @@ function joinArtists(artists) {
 }
 
 function shapeSearchResults(apiResponse) {
-  const tracks = (apiResponse?.tracks?.items || []).map((track) => ({
+  const tracks = (apiResponse?.tracks?.items || []).filter(Boolean).map((track) => ({
     id: track.id,
     uri: track.uri,
     name: track.name,

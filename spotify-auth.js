@@ -1,6 +1,8 @@
 "use strict";
 
-const crypto = require("node:crypto");
+// Named nodeCrypto rather than crypto: Node 22 exposes a global WebCrypto `crypto`,
+// and shadowing it here trips eslint's no-redeclare.
+const nodeCrypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 
@@ -11,16 +13,16 @@ function base64UrlEncode(buffer) {
 }
 
 function generateCodeVerifier() {
-  return base64UrlEncode(crypto.randomBytes(64));
+  return base64UrlEncode(nodeCrypto.randomBytes(64));
 }
 
 function generateCodeChallenge(codeVerifier) {
-  const hash = crypto.createHash("sha256").update(codeVerifier).digest();
+  const hash = nodeCrypto.createHash("sha256").update(codeVerifier).digest();
   return base64UrlEncode(hash);
 }
 
 function generateState() {
-  return base64UrlEncode(crypto.randomBytes(16));
+  return base64UrlEncode(nodeCrypto.randomBytes(16));
 }
 
 function isTokenExpired(tokens, nowMs = Date.now()) {
@@ -38,7 +40,8 @@ function readTokenFile(filePath) {
 }
 
 function writeTokenFile(filePath, tokens) {
-  fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), "utf8");
+  // mode 0600: the file holds a live refresh token, so keep it owner-readable only.
+  fs.writeFileSync(filePath, JSON.stringify(tokens, null, 2), { encoding: "utf8", mode: 0o600 });
 }
 
 function deleteTokenFile(filePath) {
@@ -110,16 +113,20 @@ function startCallbackServer(port, onCallback) {
         res.end();
         return;
       }
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      const error = url.searchParams.get("error");
+      // The real success/failure verdict (state match, token exchange) happens in
+      // node_helper.js after this response is already sent, so the page can only
+      // reflect what the query params themselves tell us.
+      const failed = Boolean(error) || !code;
       res.writeHead(200, { "Content-Type": "text/html" });
-      res.end("<html><body>Logged in. You can close this window now.</body></html>");
-      onCallback({
-        code: url.searchParams.get("code"),
-        state: url.searchParams.get("state"),
-        error: url.searchParams.get("error")
-      });
+      res.end(failed ? "<html><body>Login failed or was cancelled. You can close this window.</body></html>" : "<html><body>Logged in. You can close this window now.</body></html>");
+      onCallback({ code, state, error });
     });
     server.once("error", reject);
-    server.listen(port, () => resolve(server));
+    // Bind to loopback only — this server exists purely to catch the local OAuth redirect.
+    server.listen(port, "127.0.0.1", () => resolve(server));
   });
 }
 
