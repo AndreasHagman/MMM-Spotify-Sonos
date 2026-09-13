@@ -17,7 +17,10 @@ free account.
    https://developer.spotify.com/dashboard — note its **Client ID**
    (no secret needed, this module uses PKCE).
 2. In the app's settings, add a Redirect URI matching your `redirectUri`
-   config (default `http://localhost:8888/callback`).
+   config (default `http://127.0.0.1:8888/callback`). Spotify requires
+   HTTPS redirect URIs except for the loopback IP literal `127.0.0.1` —
+   the hostname `localhost` is rejected even though it's the same
+   machine, so use the IP literal, not the name.
 3. Add the module to `config.js`:
 
    ```text
@@ -47,7 +50,7 @@ with Spotify" state, ready for a different account.
 | Option             | Default                          | Description                                  |
 | ------------------ | -------------------------------- | -------------------------------------------- |
 | `clientId`         | _(required)_                     | Spotify Developer App Client ID              |
-| `redirectUri`      | `http://localhost:8888/callback` | Must match the app's registered Redirect URI |
+| `redirectUri`      | `http://127.0.0.1:8888/callback` | Must match the app's registered Redirect URI |
 | `pollInterval`     | `7000`                           | How often (ms) now-playing state is polled   |
 | `searchDebounce`   | `450`                            | Live-search debounce (ms)                    |
 | `maxSearchResults` | `12`                             | Max results per section (tracks/playlists)   |

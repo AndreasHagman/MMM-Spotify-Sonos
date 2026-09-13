@@ -7,7 +7,10 @@ const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshA
 const { spotifyRequest } = require("./spotify-request");
 const { shapePlaybackState, shapeSearchResults, shapeOwnPlaylists, mergePlaylists, shapeDevices, shapeQueueResponse } = require("./spotify-shape");
 
-const DEFAULT_REDIRECT_URI = "http://localhost:8888/callback";
+// Spotify requires HTTPS redirect URIs except for the loopback IP literal
+// 127.0.0.1 (the hostname "localhost" is NOT exempted, even though it
+// resolves to the same machine) — see RFC 8252 §8.3.
+const DEFAULT_REDIRECT_URI = "http://127.0.0.1:8888/callback";
 const SCOPES = ["user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "playlist-read-private", "playlist-read-collaborative"];
 
 module.exports = NodeHelper.create({

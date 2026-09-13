@@ -3,7 +3,7 @@
 Module.register("MMM-Spotify-Sonos", {
   defaults: {
     clientId: null,
-    redirectUri: "http://localhost:8888/callback",
+    redirectUri: "http://127.0.0.1:8888/callback",
     pollInterval: 7000,
     searchDebounce: 450,
     maxSearchResults: 12
