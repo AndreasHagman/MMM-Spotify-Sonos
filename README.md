@@ -1,8 +1,9 @@
 # MMM-Spotify-Sonos
 
 Search Spotify for tracks and playlists, play them now or add them to
-the queue, and pick which Spotify Connect device (e.g. a Sonos speaker
-or speaker group) they play on.
+the queue, and choose which Sonos speaker or speaker group they play on
+— controlled directly over your local network, not through Spotify
+Connect (see "How playback control works" below).
 
 ## Requirements
 
