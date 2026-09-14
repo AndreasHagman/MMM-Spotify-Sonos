@@ -54,55 +54,9 @@ function mergePlaylists(ownMatches, searchMatches, limit) {
   return merged;
 }
 
-function shapeDevices(apiResponse) {
-  return (apiResponse?.devices || []).map((device) => ({
-    id: device.id,
-    name: device.name,
-    type: device.type,
-    isActive: !!device.is_active,
-    volumePercent: device.volume_percent ?? null
-  }));
-}
-
-function shapeTrackLike(item) {
-  return {
-    id: item.id,
-    uri: item.uri,
-    name: item.name,
-    artist: joinArtists(item.artists)
-  };
-}
-
-function shapeQueueResponse(apiResponse) {
-  const current = apiResponse?.currently_playing;
-  return {
-    currentlyPlaying: current ? { ...shapeTrackLike(current), imageUrl: current.album?.images?.[0]?.url || null } : null,
-    queue: (apiResponse?.queue || []).map(shapeTrackLike)
-  };
-}
-
-function shapePlaybackState(apiResponse) {
-  if (!apiResponse || !apiResponse.item) {
-    return { isPlaying: false, device: null, track: null };
-  }
-  return {
-    isPlaying: !!apiResponse.is_playing,
-    device: apiResponse.device ? { id: apiResponse.device.id, name: apiResponse.device.name, type: apiResponse.device.type } : null,
-    track: {
-      id: apiResponse.item.id,
-      uri: apiResponse.item.uri,
-      name: apiResponse.item.name,
-      artist: joinArtists(apiResponse.item.artists),
-      imageUrl: apiResponse.item.album?.images?.[0]?.url || null
-    }
-  };
-}
 
 module.exports = {
   shapeSearchResults,
   shapeOwnPlaylists,
-  mergePlaylists,
-  shapeDevices,
-  shapeQueueResponse,
-  shapePlaybackState
+  mergePlaylists
 };

@@ -3,7 +3,7 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { shapeSearchResults, shapeOwnPlaylists, mergePlaylists, shapeDevices, shapeQueueResponse, shapePlaybackState } = require("../spotify-shape");
+const { shapeSearchResults, shapeOwnPlaylists, mergePlaylists } = require("../spotify-shape");
 
 describe("shapeSearchResults()", () => {
   it("shapes tracks and playlists from a combined search response", () => {
@@ -118,73 +118,3 @@ describe("mergePlaylists()", () => {
   });
 });
 
-describe("shapeDevices()", () => {
-  it("shapes the device list, defaulting missing fields", () => {
-    const result = shapeDevices({
-      devices: [
-        { id: "d1", name: "Living Room", type: "Speaker", is_active: true, volume_percent: 40 },
-        { id: "d2", name: "Kitchen", type: "Speaker", is_active: false }
-      ]
-    });
-    assert.deepStrictEqual(result, [
-      { id: "d1", name: "Living Room", type: "Speaker", isActive: true, volumePercent: 40 },
-      { id: "d2", name: "Kitchen", type: "Speaker", isActive: false, volumePercent: null }
-    ]);
-  });
-
-  it("returns an empty array when there are no devices", () => {
-    assert.deepStrictEqual(shapeDevices({ devices: [] }), []);
-    assert.deepStrictEqual(shapeDevices({}), []);
-  });
-});
-
-describe("shapeQueueResponse()", () => {
-  it("shapes the currently playing track and the upcoming queue", () => {
-    const result = shapeQueueResponse({
-      currently_playing: { id: "t1", uri: "u1", name: "Now Playing", artists: [{ name: "A" }] },
-      queue: [{ id: "t2", uri: "u2", name: "Next Up", artists: [{ name: "B" }] }]
-    });
-    assert.deepStrictEqual(result.currentlyPlaying, {
-      id: "t1",
-      uri: "u1",
-      name: "Now Playing",
-      artist: "A",
-      imageUrl: null
-    });
-    assert.deepStrictEqual(result.queue, [{ id: "t2", uri: "u2", name: "Next Up", artist: "B" }]);
-  });
-
-  it("handles nothing currently playing and an empty queue", () => {
-    assert.deepStrictEqual(shapeQueueResponse({ currently_playing: null, queue: [] }), {
-      currentlyPlaying: null,
-      queue: []
-    });
-    assert.deepStrictEqual(shapeQueueResponse({}), { currentlyPlaying: null, queue: [] });
-  });
-});
-
-describe("shapePlaybackState()", () => {
-  it("shapes an active playback response", () => {
-    const result = shapePlaybackState({
-      is_playing: true,
-      device: { id: "d1", name: "Living Room", type: "Speaker" },
-      item: {
-        id: "t1",
-        uri: "u1",
-        name: "Song",
-        artists: [{ name: "A" }],
-        album: { images: [{ url: "http://img/x.jpg" }] }
-      }
-    });
-    assert.deepStrictEqual(result, {
-      isPlaying: true,
-      device: { id: "d1", name: "Living Room", type: "Speaker" },
-      track: { id: "t1", uri: "u1", name: "Song", artist: "A", imageUrl: "http://img/x.jpg" }
-    });
-  });
-
-  it("treats a missing item as nothing playing", () => {
-    assert.deepStrictEqual(shapePlaybackState({}), { isPlaying: false, device: null, track: null });
-    assert.deepStrictEqual(shapePlaybackState(null), { isPlaying: false, device: null, track: null });
-  });
-});
