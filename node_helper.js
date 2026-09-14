@@ -370,7 +370,13 @@ module.exports = NodeHelper.create({
   async _playNow({ deviceId, uri, type }) {
     try {
       const body = type === "playlist" ? { context_uri: uri } : { uris: [uri] };
-      const response = await this._spotifyFetch(`/v1/me/player/play?device_id=${encodeURIComponent(deviceId)}`, {
+      // device_id is optional on this endpoint — when omitted, Spotify targets whatever
+      // device is already active. That matters because some Connect receivers (Sonos,
+      // notably) never get a resolvable device id from the Web API at all, even while
+      // actively playing — omitting device_id is the only way to target them.
+      let requestPath = "/v1/me/player/play";
+      if (deviceId) requestPath += `?device_id=${encodeURIComponent(deviceId)}`;
+      const response = await this._spotifyFetch(requestPath, {
         method: "PUT",
         body: JSON.stringify(body)
       });

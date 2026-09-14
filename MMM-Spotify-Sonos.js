@@ -55,6 +55,9 @@ Module.register("MMM-Spotify-Sonos", {
         this.playback = payload;
         this.updateDom();
         this._renderNowPlayingControls();
+        // The device picker's "Playing on" label falls back to this.playback when
+        // nothing is explicitly picked (see _renderDevicePicker) — keep it live.
+        this._renderDevicePicker();
         this._renderError();
         break;
       case "SPOTIFY_ERROR":
@@ -286,11 +289,17 @@ Module.register("MMM-Spotify-Sonos", {
     const container = this._devicePickerEl;
     container.innerHTML = "";
 
-    const activeDevice = this.devices.find((d) => d.id === this.activeDeviceId);
+    // What to show as "playing on": an explicit pick from our list, if there is one —
+    // otherwise fall back to whatever Spotify itself reports as currently active, even
+    // when that device (e.g. a Sonos speaker or group) never gets a selectable id from
+    // the Web API at all. Without this fallback the label would lie and say "—" while
+    // music is audibly playing somewhere.
+    const explicitDevice = this.devices.find((d) => d.id === this.activeDeviceId);
+    const playingOnName = explicitDevice?.name || (this.playback.isPlaying ? this.playback.device?.name : null);
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "mmm-spotify-sonos__device-picker-toggle";
-    toggle.innerText = `${this.translate("PLAYING_ON")}: ${activeDevice ? activeDevice.name : "—"} ▾`;
+    toggle.innerText = `${this.translate("PLAYING_ON")}: ${playingOnName || "—"} ▾`;
 
     const list = document.createElement("div");
     list.className = "mmm-spotify-sonos__device-picker-list";
@@ -416,16 +425,24 @@ Module.register("MMM-Spotify-Sonos", {
     return tile;
   },
 
+  // True once there's *something* to target: either an explicit pick from our device
+  // list, or Spotify itself already has an active session somewhere (even a Sonos
+  // speaker/group, which never gets a selectable id from the Web API — omitting
+  // deviceId entirely lets Spotify route the command to that active session instead).
+  _hasPlaybackTarget() {
+    return Boolean(this.activeDeviceId) || Boolean(this.playback.isPlaying && this.playback.device);
+  },
+
   _handlePlayNow(item) {
-    if (!this.activeDeviceId) {
+    if (!this._hasPlaybackTarget()) {
       if (this._deviceListEl) this._deviceListEl.hidden = false;
       return;
     }
-    this.sendSocketNotification("SPOTIFY_PLAY_NOW", { deviceId: this.activeDeviceId, uri: item.uri, type: item.type });
+    this.sendSocketNotification("SPOTIFY_PLAY_NOW", { deviceId: this.activeDeviceId || null, uri: item.uri, type: item.type });
   },
 
   _handleQueueAdd(item) {
-    if (!this.activeDeviceId) {
+    if (!this._hasPlaybackTarget()) {
       this.lastError = this.translate("NO_ACTIVE_SPEAKER");
       this._renderError();
       return;
