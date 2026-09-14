@@ -408,7 +408,19 @@ module.exports = NodeHelper.create({
       return;
     }
     try {
-      await this._sonosForZone(zone).setAVTransportURI(uri);
+      // setAVTransportURI(uri) alone plays the bare Spotify URI directly, bypassing
+      // Sonos's own queue entirely — confirmed live: with playback sourced that way,
+      // both explicit skip AND natural end-of-track auto-advance fail (UPnP error 711,
+      // "transition not available"), even with tracks already sitting in the queue.
+      // Routing through the queue instead — clear it, add this URI, switch the
+      // transport to play from the queue, then play — makes "Play now" genuinely
+      // replace what's playing (matching the original intent) while keeping skip and
+      // auto-advance working for anything queued after it.
+      const sonos = this._sonosForZone(zone);
+      await sonos.flush();
+      await sonos.queue(uri);
+      await sonos.selectQueue();
+      await sonos.play();
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not start playback: ${err.message}` });
     }
