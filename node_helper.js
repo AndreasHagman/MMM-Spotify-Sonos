@@ -332,7 +332,11 @@ module.exports = NodeHelper.create({
       } catch {
         continue;
       }
-      if (!isSpotifyTrack(track)) continue;
+      // A URI can technically contain "spotify" (e.g. a stale "x-sonos-vli:" self-
+      // reference left over on a speaker that was ungrouped mid-playback) while
+      // carrying no resolvable title — that's not a presentable "now playing" zone,
+      // so require both.
+      if (!isSpotifyTrack(track) || !track?.title) continue;
 
       let state = "stopped";
       try {
