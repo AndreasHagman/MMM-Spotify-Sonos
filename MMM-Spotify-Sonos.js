@@ -73,10 +73,6 @@ Module.register("MMM-Spotify-Sonos", {
         break;
       case "SPOTIFY_DEVICES_RESULT":
         this.devices = payload.devices;
-        if (!this.activeDeviceId) {
-          const active = this.devices.find((d) => d.isActive);
-          if (active) this.activeDeviceId = active.id;
-        }
         this._renderDevicePicker();
         this._renderError();
         break;
@@ -100,7 +96,11 @@ Module.register("MMM-Spotify-Sonos", {
     this.devices = [];
     this.activeDeviceId = null;
     this.searchResults = { tracks: [], playlists: [] };
-    this.queue = { currentlyPlaying: null, queue: [] };
+    this.queue = { queue: [] };
+    // Without this, getDom()'s `loggedIn && playback.track` check goes true the
+    // instant a new login lands and shows the PREVIOUS session's track/device
+    // until the next poll tick replaces it.
+    this.playback = { isPlaying: false, device: null, track: null };
   },
 
   _debouncedSearch(query) {
@@ -417,8 +417,10 @@ Module.register("MMM-Spotify-Sonos", {
     playBtn.addEventListener("click", () => this._handlePlayNow(item));
     actions.appendChild(playBtn);
 
-    // Spotify's queue endpoint only accepts track/episode URIs — offering
-    // "Add to queue" on a playlist would just guarantee a failure.
+    // Playlists aren't offered an "Add to queue" button in v1 — queueing a whole
+    // playlist at once is a different interaction than track-by-track queueing and
+    // wasn't part of this pivot's scope (Sonos's own queue() does support playlist
+    // URIs technically).
     if (item.type === "track") {
       const queueBtn = document.createElement("button");
       queueBtn.type = "button";

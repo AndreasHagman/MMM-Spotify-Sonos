@@ -54,7 +54,6 @@ function mergePlaylists(ownMatches, searchMatches, limit) {
   return merged;
 }
 
-
 module.exports = {
   shapeSearchResults,
   shapeOwnPlaylists,
