@@ -6,7 +6,9 @@ Module.register("MMM-Spotify-Sonos", {
     redirectUri: "http://127.0.0.1:8888/callback",
     pollInterval: 7000,
     searchDebounce: 450,
-    maxSearchResults: 10
+    maxSearchResults: 10,
+    sonosSpotifyRegion: "2311",
+    sonosDiscoveryTimeout: 5000
   },
 
   start() {
@@ -19,7 +21,7 @@ Module.register("MMM-Spotify-Sonos", {
     this.activeDeviceId = null;
     this._overlayEl = null;
     this.searchResults = { tracks: [], playlists: [] };
-    this.queue = { currentlyPlaying: null, queue: [] };
+    this.queue = { queue: [] };
     this._searchDebounceTimer = null;
     this.sendSocketNotification("SPOTIFY_CONFIG", this.config);
   },
@@ -53,10 +55,13 @@ Module.register("MMM-Spotify-Sonos", {
         // An error only clears when the specific action that caused it succeeds
         // (see the SPOTIFY_DEVICES_RESULT/SPOTIFY_SEARCH_RESULT cases below).
         this.playback = payload;
+        // If nothing has been explicitly picked yet, adopt whichever zone is playing
+        // Spotify content as the default target — this only fires once, the first
+        // time a Spotify session is detected; after that the user (or this initial
+        // adoption) owns activeDeviceId until they pick a different zone or log out.
+        if (!this.activeDeviceId && payload.device) this.activeDeviceId = payload.device.id;
         this.updateDom();
         this._renderNowPlayingControls();
-        // The device picker's "Playing on" label falls back to this.playback when
-        // nothing is explicitly picked (see _renderDevicePicker) — keep it live.
         this._renderDevicePicker();
         this._renderError();
         break;
@@ -289,17 +294,14 @@ Module.register("MMM-Spotify-Sonos", {
     const container = this._devicePickerEl;
     container.innerHTML = "";
 
-    // What to show as "playing on": an explicit pick from our list, if there is one —
-    // otherwise fall back to whatever Spotify itself reports as currently active, even
-    // when that device (e.g. a Sonos speaker or group) never gets a selectable id from
-    // the Web API at all. Without this fallback the label would lie and say "—" while
-    // music is audibly playing somewhere.
-    const explicitDevice = this.devices.find((d) => d.id === this.activeDeviceId);
-    const playingOnName = explicitDevice?.name || (this.playback.isPlaying ? this.playback.device?.name : null);
+    // A Sonos zone id is always real (never null the way a Spotify Connect device id
+    // could be), so activeDeviceId reliably matches an entry in this.devices once set
+    // — no fallback needed here.
+    const activeDevice = this.devices.find((d) => d.id === this.activeDeviceId);
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "mmm-spotify-sonos__device-picker-toggle";
-    toggle.innerText = `${this.translate("PLAYING_ON")}: ${playingOnName || "—"} ▾`;
+    toggle.innerText = `${this.translate("PLAYING_ON")}: ${activeDevice?.name || "—"} ▾`;
 
     const list = document.createElement("div");
     list.className = "mmm-spotify-sonos__device-picker-list";
@@ -319,7 +321,6 @@ Module.register("MMM-Spotify-Sonos", {
       item.innerText = device.name;
       item.addEventListener("click", () => {
         this.activeDeviceId = device.id;
-        this.sendSocketNotification("SPOTIFY_TRANSFER", { deviceId: device.id });
         list.hidden = true;
         this._renderDevicePicker();
       });
@@ -344,7 +345,10 @@ Module.register("MMM-Spotify-Sonos", {
     prevBtn.type = "button";
     prevBtn.className = "mmm-spotify-sonos__control-btn";
     prevBtn.innerText = "⏮";
-    prevBtn.addEventListener("click", () => this.sendSocketNotification("SPOTIFY_SKIP", { direction: "previous" }));
+    prevBtn.addEventListener("click", () => {
+      if (!this.activeDeviceId) return;
+      this.sendSocketNotification("SPOTIFY_SKIP", { deviceId: this.activeDeviceId, direction: "previous" });
+    });
     controls.appendChild(prevBtn);
 
     const isPlaying = this.playback.isPlaying;
@@ -353,9 +357,10 @@ Module.register("MMM-Spotify-Sonos", {
     playPauseBtn.className = "mmm-spotify-sonos__control-btn mmm-spotify-sonos__control-btn--primary";
     playPauseBtn.innerText = isPlaying ? "⏸" : "▶";
     playPauseBtn.addEventListener("click", () => {
+      if (!this.activeDeviceId) return;
       // Optimistic flip — SPOTIFY_PLAYBACK_STATE will correct it on the next poll tick.
       this.playback = { ...this.playback, isPlaying: !isPlaying };
-      this.sendSocketNotification("SPOTIFY_PLAYPAUSE", { isPlaying });
+      this.sendSocketNotification("SPOTIFY_PLAYPAUSE", { deviceId: this.activeDeviceId, isPlaying });
       this._renderNowPlayingControls();
     });
     controls.appendChild(playPauseBtn);
@@ -364,7 +369,10 @@ Module.register("MMM-Spotify-Sonos", {
     nextBtn.type = "button";
     nextBtn.className = "mmm-spotify-sonos__control-btn";
     nextBtn.innerText = "⏭";
-    nextBtn.addEventListener("click", () => this.sendSocketNotification("SPOTIFY_SKIP", { direction: "next" }));
+    nextBtn.addEventListener("click", () => {
+      if (!this.activeDeviceId) return;
+      this.sendSocketNotification("SPOTIFY_SKIP", { deviceId: this.activeDeviceId, direction: "next" });
+    });
     controls.appendChild(nextBtn);
   },
 
@@ -425,12 +433,8 @@ Module.register("MMM-Spotify-Sonos", {
     return tile;
   },
 
-  // True once there's *something* to target: either an explicit pick from our device
-  // list, or Spotify itself already has an active session somewhere (even a Sonos
-  // speaker/group, which never gets a selectable id from the Web API — omitting
-  // deviceId entirely lets Spotify route the command to that active session instead).
   _hasPlaybackTarget() {
-    return Boolean(this.activeDeviceId) || Boolean(this.playback.isPlaying && this.playback.device);
+    return Boolean(this.activeDeviceId);
   },
 
   _handlePlayNow(item) {
@@ -438,7 +442,7 @@ Module.register("MMM-Spotify-Sonos", {
       if (this._deviceListEl) this._deviceListEl.hidden = false;
       return;
     }
-    this.sendSocketNotification("SPOTIFY_PLAY_NOW", { deviceId: this.activeDeviceId || null, uri: item.uri, type: item.type });
+    this.sendSocketNotification("SPOTIFY_PLAY_NOW", { deviceId: this.activeDeviceId, uri: item.uri });
   },
 
   _handleQueueAdd(item) {
