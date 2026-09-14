@@ -38,13 +38,20 @@ function isSpotifyTrack(rawTrack) {
 // forever instead of updating. currentTrack().queuePosition is the 1-indexed
 // position of the track currently playing (rawQueueItems[0] is position 1),
 // so the items strictly after it — rawQueueItems.slice(queuePosition) — are
-// what's actually still ahead. A missing/unparseable queuePosition (e.g.
-// nothing is playing from the queue yet) falls back to the full queue rather
-// than hiding it.
+// what's actually still ahead.
+//
+// A queuePosition that isn't a valid 1-based index into the queue (0,
+// negative, or missing/unparseable) means the current track ISN'T actually
+// playing from the tracked queue at all — confirmed live: once an explicit
+// queue plays out to its end, Sonos/Spotify can auto-continue into a
+// recommendation ("x-sonos-vli:" autoplay) with queuePosition 0, while the
+// old queue's now-fully-played tracks are still sitting in getQueue()'s
+// result. None of them are genuinely "up next" at that point, so this
+// returns an empty list rather than the stale queue.
 function upcomingQueueItems(rawQueueItems, queuePosition) {
   const items = rawQueueItems || [];
-  const position = Number.isInteger(queuePosition) ? queuePosition : 0;
-  return items.slice(position);
+  if (!Number.isInteger(queuePosition) || queuePosition < 1) return [];
+  return items.slice(queuePosition);
 }
 
 module.exports = { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems };

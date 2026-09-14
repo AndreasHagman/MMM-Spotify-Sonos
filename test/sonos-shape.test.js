@@ -72,9 +72,14 @@ describe("upcomingQueueItems()", () => {
     assert.deepStrictEqual(upcomingQueueItems(items, 3), []);
   });
 
-  it("falls back to the full queue when queuePosition is missing/unparseable", () => {
-    assert.deepStrictEqual(upcomingQueueItems(items, NaN), items);
-    assert.deepStrictEqual(upcomingQueueItems(items, undefined), items);
+  it("returns an empty list when queuePosition is missing/unparseable or not a valid 1-based index", () => {
+    // Confirmed live: once the explicit queue plays out, Sonos/Spotify can auto-continue
+    // into a recommendation outside the queue, reporting queuePosition 0 while getQueue()
+    // still lists the now-fully-played tracks — none of them are genuinely "up next".
+    assert.deepStrictEqual(upcomingQueueItems(items, 0), []);
+    assert.deepStrictEqual(upcomingQueueItems(items, NaN), []);
+    assert.deepStrictEqual(upcomingQueueItems(items, undefined), []);
+    assert.deepStrictEqual(upcomingQueueItems(items, -1), []);
   });
 
   it("returns an empty array for a missing/empty queue", () => {
