@@ -393,67 +393,57 @@ module.exports = NodeHelper.create({
     }
   },
 
-  async _transfer({ deviceId }) {
-    try {
-      const response = await this._spotifyFetch("/v1/me/player", {
-        method: "PUT",
-        body: JSON.stringify({ device_ids: [deviceId], play: false })
-      });
-      if (!response.ok && response.status !== 204) throw new Error(`${response.status}`);
-    } catch (err) {
-      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not switch speaker: ${err.message}` });
+  async _playNow({ deviceId, uri }) {
+    const zone = this._findZone(deviceId);
+    if (!zone) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: "No such speaker — pick one first" });
+      return;
     }
-  },
-
-  async _playNow({ deviceId, uri, type }) {
     try {
-      const body = type === "playlist" ? { context_uri: uri } : { uris: [uri] };
-      // device_id is optional on this endpoint — when omitted, Spotify targets whatever
-      // device is already active. That matters because some Connect receivers (Sonos,
-      // notably) never get a resolvable device id from the Web API at all, even while
-      // actively playing — omitting device_id is the only way to target them.
-      let requestPath = "/v1/me/player/play";
-      if (deviceId) requestPath += `?device_id=${encodeURIComponent(deviceId)}`;
-      const response = await this._spotifyFetch(requestPath, {
-        method: "PUT",
-        body: JSON.stringify(body)
-      });
-      if (!response.ok && response.status !== 204) throw new Error(`${response.status}`);
+      await this._sonosForZone(zone).setAVTransportURI(uri);
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not start playback: ${err.message}` });
     }
   },
 
   async _queueAdd({ uri, deviceId }) {
+    const zone = this._findZone(deviceId);
+    if (!zone) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: "No active speaker — pick one first" });
+      return;
+    }
     try {
-      let requestPath = `/v1/me/player/queue?uri=${encodeURIComponent(uri)}`;
-      if (deviceId) requestPath += `&device_id=${encodeURIComponent(deviceId)}`;
-      const response = await this._spotifyFetch(requestPath, { method: "POST" });
-      if (response.status === 404) {
-        this.sendSocketNotification("SPOTIFY_ERROR", { message: "No active speaker — pick one first" });
-        return;
-      }
-      if (!response.ok && response.status !== 204) throw new Error(`${response.status}`);
+      await this._sonosForZone(zone).queue(uri);
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not add to queue: ${err.message}` });
     }
   },
 
-  async _playPause({ isPlaying }) {
+  async _playPause({ deviceId, isPlaying }) {
+    const zone = this._findZone(deviceId);
+    if (!zone) return;
     try {
-      const endpoint = isPlaying ? "/v1/me/player/pause" : "/v1/me/player/play";
-      const response = await this._spotifyFetch(endpoint, { method: "PUT" });
-      if (!response.ok && response.status !== 204) throw new Error(`${response.status}`);
+      const sonos = this._sonosForZone(zone);
+      if (isPlaying) {
+        await sonos.pause();
+      } else {
+        await sonos.play();
+      }
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not toggle playback: ${err.message}` });
     }
   },
 
-  async _skip({ direction }) {
+  async _skip({ deviceId, direction }) {
+    const zone = this._findZone(deviceId);
+    if (!zone) return;
     try {
-      const endpoint = direction === "previous" ? "/v1/me/player/previous" : "/v1/me/player/next";
-      const response = await this._spotifyFetch(endpoint, { method: "POST" });
-      if (!response.ok && response.status !== 204) throw new Error(`${response.status}`);
+      const sonos = this._sonosForZone(zone);
+      if (direction === "previous") {
+        await sonos.previous();
+      } else {
+        await sonos.next();
+      }
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not skip: ${err.message}` });
     }
