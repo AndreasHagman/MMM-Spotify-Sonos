@@ -6,10 +6,12 @@ or speaker group) they play on.
 
 ## Requirements
 
-A **Spotify Premium** account is required. Spotify Connect device
-transfer and the Web API's playback-control endpoints (play, pause,
-skip, add-to-queue) are Premium-only, so this module will not work on a
-free account.
+- A **Spotify Premium** account (needed for Sonos's own Spotify
+  integration and for this module's search/browse calls).
+- The machine running MagicMirror must be on the **same local network**
+  as your Sonos speakers — this module talks to Sonos directly over
+  UPnP (the same approach `MMM-Sonos` uses), not through Spotify's
+  cloud, so it needs to reach them on the LAN.
 
 ## Setup
 
@@ -45,14 +47,25 @@ To switch accounts, use the **Log out** button in the overlay header:
 it deletes the stored token file and returns the module to the "Log in
 with Spotify" state, ready for a different account.
 
+## How playback control works
+
+Spotify's public Web API cannot control a Sonos speaker at all — this
+was confirmed by testing directly against real hardware: Sonos never
+appears in Spotify's device list, and every playback command (play,
+pause, skip, queue) returns 403 Forbidden regardless. So this module
+doesn't try to route playback through Spotify Connect. Instead, once
+you pick (or the module auto-detects) a Sonos zone or group, "Play
+now" / "Add to queue" / "Play-pause" / "Skip" all talk to that Sonos
+speaker directly over your local network, the same way `MMM-Sonos`
+does. Spotify's Web API is only used for logging in and for search.
+
+**"Up next"** shows Sonos's own queue, which only contains what's been
+explicitly queued (via this module's "Add to queue", or the Sonos/Spotify
+apps) — not a full preview of everything Spotify would play next in a
+playlist, the way Spotify's own queue view does.
+
 ## Known quirks
 
-- **No devices showing up?** Spotify Connect only lists a device once
-  it's been recently active. If the device picker says "No Spotify
-  Connect devices found," open the Spotify app on your phone (or start
-  playing something via Spotify Connect to a Sonos speaker from there)
-  at least once — it should then appear here too. This isn't something
-  this module can fix; it's how Spotify Connect discovery works.
 - **Search limit:** this module's Spotify app currently has its
   `/v1/search` `limit` parameter capped at 10 by Spotify (values above
   that return a 400 "Invalid limit"), tighter than the 1-50 range
@@ -63,13 +76,15 @@ with Spotify" state, ready for a different account.
 
 ## Config options
 
-| Option             | Default                          | Description                                  |
-| ------------------ | -------------------------------- | -------------------------------------------- |
-| `clientId`         | _(required)_                     | Spotify Developer App Client ID              |
-| `redirectUri`      | `http://127.0.0.1:8888/callback` | Must match the app's registered Redirect URI |
-| `pollInterval`     | `7000`                           | How often (ms) now-playing state is polled   |
-| `searchDebounce`   | `450`                            | Live-search debounce (ms)                    |
-| `maxSearchResults` | `10`                             | Max results per section (tracks/playlists) — see "Search limit" above |
+| Option                  | Default                          | Description                                                                                           |
+| ----------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `clientId`              | _(required)_                     | Spotify Developer App Client ID                                                                       |
+| `redirectUri`           | `http://127.0.0.1:8888/callback` | Must match the app's registered Redirect URI                                                          |
+| `pollInterval`          | `7000`                           | How often (ms) now-playing state and Sonos zones are polled                                           |
+| `searchDebounce`        | `450`                            | Live-search debounce (ms)                                                                             |
+| `maxSearchResults`      | `10`                             | Max results per section (tracks/playlists) — see "Search limit" above                                 |
+| `sonosSpotifyRegion`    | `'2311'` (Europe)                | Spotify region code used when generating Sonos playback metadata — change for non-European households |
+| `sonosDiscoveryTimeout` | `5000`                           | Milliseconds to wait when discovering Sonos zones on the network                                      |
 
 ## Scope
 
