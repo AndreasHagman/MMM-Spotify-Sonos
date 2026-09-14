@@ -3,7 +3,7 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { shapeZones, shapeTrack, isSpotifyTrack } = require("../sonos-shape");
+const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems } = require("../sonos-shape");
 
 describe("shapeZones()", () => {
   it("shapes a list of raw Sonos groups into id/name/coordinatorHost", () => {
@@ -58,6 +58,28 @@ describe("shapeTrack()", () => {
       albumArtURL: "http://10.0.0.17:1400/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253aabc"
     };
     assert.strictEqual(shapeTrack(raw).imageUrl, "http://10.0.0.17:1400/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253aabc");
+  });
+});
+
+describe("upcomingQueueItems()", () => {
+  const items = [{ title: "Hideaway" }, { title: "Dancing Queen" }, { title: "Sandstorm" }];
+
+  it("drops tracks up to and including the current queue position (1-indexed)", () => {
+    assert.deepStrictEqual(upcomingQueueItems(items, 1), [{ title: "Dancing Queen" }, { title: "Sandstorm" }]);
+  });
+
+  it("returns an empty list once the current track is the last one in the queue", () => {
+    assert.deepStrictEqual(upcomingQueueItems(items, 3), []);
+  });
+
+  it("falls back to the full queue when queuePosition is missing/unparseable", () => {
+    assert.deepStrictEqual(upcomingQueueItems(items, NaN), items);
+    assert.deepStrictEqual(upcomingQueueItems(items, undefined), items);
+  });
+
+  it("returns an empty array for a missing/empty queue", () => {
+    assert.deepStrictEqual(upcomingQueueItems(null, 1), []);
+    assert.deepStrictEqual(upcomingQueueItems([], 1), []);
   });
 });
 

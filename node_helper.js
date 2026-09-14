@@ -7,7 +7,7 @@ const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshA
 const { spotifyRequest } = require("./spotify-request");
 const { shapeSearchResults, shapeOwnPlaylists, mergePlaylists } = require("./spotify-shape");
 const { AsyncDeviceDiscovery, Sonos } = require("sonos");
-const { shapeZones, shapeTrack, isSpotifyTrack } = require("./sonos-shape");
+const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems } = require("./sonos-shape");
 
 // Spotify requires HTTPS redirect URIs except for the loopback IP literal
 // 127.0.0.1 (the hostname "localhost" is NOT exempted, even though it
@@ -354,7 +354,7 @@ module.exports = NodeHelper.create({
       let queueItems = [];
       try {
         const queueResult = await coordinator.getQueue();
-        queueItems = (queueResult?.items || []).map(shapeTrack);
+        queueItems = upcomingQueueItems(queueResult?.items, track.queuePosition).map(shapeTrack);
       } catch {
         // Queue read failures aren't fatal — just show an empty "up next" list.
       }

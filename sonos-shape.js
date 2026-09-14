@@ -32,4 +32,19 @@ function isSpotifyTrack(rawTrack) {
   return Boolean(rawTrack?.uri && rawTrack.uri.toLowerCase().includes("spotify"));
 }
 
-module.exports = { shapeZones, shapeTrack, isSpotifyTrack };
+// getQueue() always returns the WHOLE Sonos queue from position 1, including
+// tracks already played — it never shrinks or reorders as playback advances.
+// Left unfiltered, "Up Next" would keep showing already-skipped-past tracks
+// forever instead of updating. currentTrack().queuePosition is the 1-indexed
+// position of the track currently playing (rawQueueItems[0] is position 1),
+// so the items strictly after it — rawQueueItems.slice(queuePosition) — are
+// what's actually still ahead. A missing/unparseable queuePosition (e.g.
+// nothing is playing from the queue yet) falls back to the full queue rather
+// than hiding it.
+function upcomingQueueItems(rawQueueItems, queuePosition) {
+  const items = rawQueueItems || [];
+  const position = Number.isInteger(queuePosition) ? queuePosition : 0;
+  return items.slice(position);
+}
+
+module.exports = { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems };
