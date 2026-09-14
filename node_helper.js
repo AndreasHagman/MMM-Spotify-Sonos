@@ -5,7 +5,9 @@ const Log = require("logger");
 const path = require("node:path");
 const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshAccessToken, generateCodeVerifier, generateCodeChallenge, generateState, buildAuthorizeUrl, exchangeCodeForTokens, startCallbackServer } = require("./spotify-auth");
 const { spotifyRequest } = require("./spotify-request");
-const { shapePlaybackState, shapeSearchResults, shapeOwnPlaylists, mergePlaylists, shapeDevices, shapeQueueResponse } = require("./spotify-shape");
+const { shapeSearchResults, shapeOwnPlaylists, mergePlaylists } = require("./spotify-shape");
+const { AsyncDeviceDiscovery, Sonos } = require("sonos");
+const { shapeZones, shapeTrack, isSpotifyTrack } = require("./sonos-shape");
 
 // Spotify requires HTTPS redirect URIs except for the loopback IP literal
 // 127.0.0.1 (the hostname "localhost" is NOT exempted, even though it
@@ -22,6 +24,8 @@ module.exports = NodeHelper.create({
     this.authServer = null;
     this.pendingLogin = null;
     this._refreshPromise = null;
+    this.zones = [];
+    this.sonosEntryPoint = null;
   },
 
   stop() {
@@ -47,10 +51,7 @@ module.exports = NodeHelper.create({
         this._search(payload || {});
         break;
       case "SPOTIFY_DEVICES_REQUEST":
-        this._getDevices();
-        break;
-      case "SPOTIFY_TRANSFER":
-        this._transfer(payload || {});
+        this._refreshSonos();
         break;
       case "SPOTIFY_PLAY_NOW":
         this._playNow(payload || {});
@@ -73,7 +74,9 @@ module.exports = NodeHelper.create({
         redirectUri: DEFAULT_REDIRECT_URI,
         pollInterval: 7000,
         searchDebounce: 450,
-        maxSearchResults: 10
+        maxSearchResults: 10,
+        sonosSpotifyRegion: "2311",
+        sonosDiscoveryTimeout: 5000
       },
       config
     );
@@ -265,49 +268,95 @@ module.exports = NodeHelper.create({
 
   _startPolling() {
     this._stopPolling();
-    this._poll();
-    this.pollTimer = setInterval(() => this._poll(), this.config.pollInterval);
+    this._refreshSonos();
+    this.pollTimer = setInterval(() => this._refreshSonos(), this.config.pollInterval);
   },
 
-  // One tick: now-playing state and the "up next" queue, on the same timer.
-  _poll() {
-    this._pollPlaybackState();
-    this._pollQueue();
+  async _ensureSonosDevice() {
+    if (this.sonosEntryPoint) return this.sonosEntryPoint;
+    const discovery = new AsyncDeviceDiscovery();
+    this.sonosEntryPoint = await discovery.discover({ timeout: this.config.sonosDiscoveryTimeout });
+    return this.sonosEntryPoint;
   },
 
-  async _pollPlaybackState() {
+  _findZone(zoneId) {
+    return (this.zones || []).find((z) => z.id === zoneId) || null;
+  },
+
+  _sonosForZone(zone) {
+    const sonos = new Sonos(zone.coordinatorHost);
+    sonos.setSpotifyRegion(this.config.sonosSpotifyRegion);
+    return sonos;
+  },
+
+  _sendEmptySonosState() {
+    this.sendSocketNotification("SPOTIFY_DEVICES_RESULT", { devices: [] });
+    this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null });
+    this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { queue: [] });
+  },
+
+  // One tick: discover zones, report the device list, and find whichever zone (if
+  // any) is playing Spotify content specifically — not just "something" — since this
+  // module's whole purpose is Spotify/speaker interaction, not general Sonos status.
+  async _refreshSonos() {
+    let entryPoint;
     try {
-      const response = await this._spotifyFetch("/v1/me/player");
-      if (response.status === 204) {
-        this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null });
-        return;
-      }
-      if (!response.ok) throw new Error(`${response.status}`);
-      const json = await response.json();
-      this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", shapePlaybackState(json));
+      entryPoint = await this._ensureSonosDevice();
     } catch (err) {
-      Log.error(`[MMM-Spotify-Sonos] Failed to poll playback state: ${err.message}`);
-      // Transient failures simply retry on the next tick. A rejected refresh token is
-      // terminal — _spotifyFetch normally escalates it already, this covers any that
-      // reach us another way (and is a no-op once the tokens are gone).
-      if (this.tokens && this._isAuthRejection(err)) this._handleAuthFailure();
+      Log.error(`[MMM-Spotify-Sonos] Sonos discovery failed: ${err.message}`);
+      this._sendEmptySonosState();
+      return;
     }
-  },
 
-  async _pollQueue() {
+    let groups;
     try {
-      const response = await this._spotifyFetch("/v1/me/player/queue");
-      if (response.status === 204) {
-        this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { currentlyPlaying: null, queue: [] });
-        return;
-      }
-      if (!response.ok) throw new Error(`${response.status}`);
-      const json = await response.json();
-      this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", shapeQueueResponse(json));
+      groups = await entryPoint.getAllGroups();
     } catch (err) {
-      Log.error(`[MMM-Spotify-Sonos] Failed to poll queue: ${err.message}`);
-      if (this.tokens && this._isAuthRejection(err)) this._handleAuthFailure();
+      Log.error(`[MMM-Spotify-Sonos] Could not read Sonos zones (retrying discovery next tick): ${err.message}`);
+      this.sonosEntryPoint = null;
+      return;
     }
+
+    this.zones = shapeZones(groups);
+    this.sendSocketNotification("SPOTIFY_DEVICES_RESULT", { devices: this.zones.map(({ id, name }) => ({ id, name })) });
+
+    for (const group of groups) {
+      const coordinator = group.CoordinatorDevice();
+      let track;
+      try {
+        track = await coordinator.currentTrack();
+      } catch {
+        continue;
+      }
+      if (!isSpotifyTrack(track)) continue;
+
+      let state = "stopped";
+      try {
+        state = await coordinator.getCurrentState();
+      } catch {
+        // Leave state as "stopped" if we can't read it — still report the track/device.
+      }
+
+      this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", {
+        isPlaying: state === "playing",
+        device: { id: group.ID, name: group.Name },
+        track: shapeTrack(track)
+      });
+
+      let queueItems = [];
+      try {
+        const queueResult = await coordinator.getQueue();
+        queueItems = (queueResult?.items || []).map(shapeTrack);
+      } catch {
+        // Queue read failures aren't fatal — just show an empty "up next" list.
+      }
+      this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { queue: queueItems });
+      return;
+    }
+
+    // No zone is playing Spotify content.
+    this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null });
+    this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { queue: [] });
   },
 
   async _search({ query }) {
@@ -341,17 +390,6 @@ module.exports = NodeHelper.create({
       this.sendSocketNotification("SPOTIFY_SEARCH_RESULT", { tracks: shaped.tracks, playlists });
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Search failed: ${err.message}` });
-    }
-  },
-
-  async _getDevices() {
-    try {
-      const response = await this._spotifyFetch("/v1/me/player/devices");
-      if (!response.ok) throw new Error(`${response.status}`);
-      const json = await response.json();
-      this.sendSocketNotification("SPOTIFY_DEVICES_RESULT", { devices: shapeDevices(json) });
-    } catch (err) {
-      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not load devices: ${err.message}` });
     }
   },
 
