@@ -53,7 +53,7 @@ Module.register("MMM-Spotify-Sonos", {
         // (every pollInterval, unrelated to any user action), so clearing it here
         // made real errors vanish on their own before anyone could read them.
         // An error only clears when the specific action that caused it succeeds
-        // (see the SPOTIFY_DEVICES_RESULT/SPOTIFY_SEARCH_RESULT cases below).
+        // (see the SPOTIFY_SEARCH_RESULT case below).
         this.playback = payload;
         // If nothing has been explicitly picked yet, adopt whichever zone is playing
         // Spotify content as the default target — this only fires once, the first
@@ -72,7 +72,6 @@ Module.register("MMM-Spotify-Sonos", {
         this._renderError();
         break;
       case "SPOTIFY_DEVICES_RESULT":
-        this.lastError = null;
         this.devices = payload.devices;
         if (!this.activeDeviceId) {
           const active = this.devices.find((d) => d.isActive);

@@ -7,8 +7,9 @@ Connect (see "How playback control works" below).
 
 ## Requirements
 
-- A **Spotify Premium** account (needed for Sonos's own Spotify
-  integration and for this module's search/browse calls).
+- A **Spotify Premium** account — required by Sonos's own Spotify
+  integration, i.e. for anything to actually play on a speaker. Logging
+  in and searching work on a free account; only playback needs Premium.
 - The machine running MagicMirror must be on the **same local network**
   as your Sonos speakers — this module talks to Sonos directly over
   UPnP (the same approach `MMM-Sonos` uses), not through Spotify's
@@ -36,7 +37,15 @@ Connect (see "How playback control works" below).
    }
    ```
 
-4. Start MagicMirror, tap the Spotify icon, and log in. Tokens are
+4. Install this module's dependencies (it needs the `sonos` package;
+   without it `node_helper.js` fails at startup with
+   `Cannot find module 'sonos'`):
+
+   ```text
+   cd modules/MMM-Spotify-Sonos && npm install
+   ```
+
+5. Start MagicMirror, tap the Spotify icon, and log in. Tokens are
    stored in `spotify_access_token.json` next to `node_helper.js`
    (gitignored) and refreshed automatically.
 
@@ -59,6 +68,11 @@ you pick (or the module auto-detects) a Sonos zone or group, "Play
 now" / "Add to queue" / "Play-pause" / "Skip" all talk to that Sonos
 speaker directly over your local network, the same way `MMM-Sonos`
 does. Spotify's Web API is only used for logging in and for search.
+
+Note: the collapsed "now playing" display always shows whichever zone
+the module detects playing Spotify content, which may differ from the
+zone you've explicitly selected for new commands if more than one zone
+is in use at once.
 
 **"Up next"** shows Sonos's own queue, which only contains what's been
 explicitly queued (via this module's "Add to queue", or the Sonos/Spotify

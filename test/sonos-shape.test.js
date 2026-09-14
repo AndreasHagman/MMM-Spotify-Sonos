@@ -20,6 +20,14 @@ describe("shapeZones()", () => {
   it("returns an empty array for an empty group list", () => {
     assert.deepStrictEqual(shapeZones([]), []);
   });
+
+  it("skips a group whose coordinator can't be resolved, keeping the resolvable ones", () => {
+    const rawGroups = [
+      { ID: "RINCON_GONE:9", Name: "Ghost zone" },
+      { ID: "RINCON_B:2", Name: "Stue", CoordinatorDevice: () => ({ host: "10.0.0.34" }) }
+    ];
+    assert.deepStrictEqual(shapeZones(rawGroups), [{ id: "RINCON_B:2", name: "Stue", coordinatorHost: "10.0.0.34" }]);
+  });
 });
 
 describe("shapeTrack()", () => {
@@ -40,6 +48,16 @@ describe("shapeTrack()", () => {
 
   it("defaults missing fields rather than throwing", () => {
     assert.deepStrictEqual(shapeTrack({}), { name: "", artist: "", imageUrl: null });
+  });
+
+  it("prefers the absolute albumArtURL over the relative albumArtURI (Sonos returns both, only the URL one is directly usable)", () => {
+    const raw = {
+      title: "Song",
+      artist: "Artist",
+      albumArtURI: "/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253aabc",
+      albumArtURL: "http://10.0.0.17:1400/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253aabc"
+    };
+    assert.strictEqual(shapeTrack(raw).imageUrl, "http://10.0.0.17:1400/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253aabc");
   });
 });
 

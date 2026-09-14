@@ -321,9 +321,13 @@ module.exports = NodeHelper.create({
     this.sendSocketNotification("SPOTIFY_DEVICES_RESULT", { devices: this.zones.map(({ id, name }) => ({ id, name })) });
 
     for (const group of groups) {
-      const coordinator = group.CoordinatorDevice();
+      // A group whose coordinator can't be resolved has nothing to read (and would
+      // throw an unhandled rejection out of this un-awaited method, killing the tick).
+      if (typeof group.CoordinatorDevice !== "function") continue;
       let track;
+      let coordinator;
       try {
+        coordinator = group.CoordinatorDevice();
         track = await coordinator.currentTrack();
       } catch {
         continue;
