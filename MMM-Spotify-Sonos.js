@@ -440,7 +440,15 @@ Module.register("MMM-Spotify-Sonos", {
 
   _handlePlayNow(item) {
     if (!this._hasPlaybackTarget()) {
-      if (this._deviceListEl) this._deviceListEl.hidden = false;
+      // Just unhiding the list isn't enough — it lives at the top of the overlay,
+      // while the result you tapped can be scrolled far below it, so the list can
+      // pop open completely out of view and look like nothing happened at all.
+      this.lastError = this.translate("NO_ACTIVE_SPEAKER");
+      this._renderError();
+      if (this._deviceListEl) {
+        this._deviceListEl.hidden = false;
+        this._deviceListEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
       return;
     }
     this.sendSocketNotification("SPOTIFY_PLAY_NOW", { deviceId: this.activeDeviceId, uri: item.uri });
