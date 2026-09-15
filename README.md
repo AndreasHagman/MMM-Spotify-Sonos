@@ -20,9 +20,11 @@ all (confirmed by testing against real hardware — Sonos never appears
 in Spotify's device list, and every playback command returns 403
 Forbidden, regardless). So instead, all actual playback — play now,
 queue, play/pause, skip — talks directly to your Sonos speakers over
-the local network via the `sonos` npm library (the same one `MMM-Sonos`
-uses), bypassing Spotify Connect entirely. See "How playback control
-works" below for the full explanation.
+the local network via the `sonos` npm library — the same approach used
+by [MMM-Sonos](https://github.com/AndreasHagman/MMM-Sonos), the sibling
+module this one was designed to sit alongside for Sonos status/control
+— bypassing Spotify Connect entirely. See "How playback control works"
+below for the full explanation.
 
 ## Requirements
 
