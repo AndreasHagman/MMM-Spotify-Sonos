@@ -92,12 +92,14 @@ Module.register("MMM-Spotify-Sonos", {
         this._renderError();
         this._clearBusyButtons();
         break;
-      // Sent once a Play now / Add to queue call actually finishes talking to
-      // Sonos — a single track resolves almost immediately, but a playlist can
-      // take a few seconds (Sonos has to expand it before it can play), and
-      // without this the button gave no sign anything was happening at all.
+      // Sent once a Play now / Add to queue / speaker switch call actually
+      // finishes talking to Sonos — a single track (or a switch with nothing
+      // to move) resolves almost immediately, but a playlist, or a large
+      // queue moving to a new speaker, can take several seconds, and without
+      // this nothing gave any sign something was happening at all.
       case "SPOTIFY_ACTION_DONE":
         this._clearBusyButtons();
+        this._clearSpeakerSwitching();
         break;
       case "SPOTIFY_DEVICES_RESULT":
         this.devices = payload.devices;
@@ -419,6 +421,12 @@ Module.register("MMM-Spotify-Sonos", {
         // Full re-render (not just hiding the list) so the "Playing on: X"
         // label picks up the new selection immediately.
         this._renderDevicePicker();
+        // Moving a large queue to the new speaker can take several seconds
+        // with nothing else on screen to show for it — cleared by
+        // SPOTIFY_ACTION_DONE once the backend confirms it's actually done
+        // (near-instant if this wasn't a real transfer, so the indicator
+        // just never has time to show in that case).
+        this._setSpeakerSwitching();
       });
       list.appendChild(item);
     });
@@ -678,6 +686,38 @@ Module.register("MMM-Spotify-Sonos", {
       btn.classList.remove("mmm-spotify-sonos__result-action--busy");
       if (btn.dataset.defaultLabel) btn.innerText = btn.dataset.defaultLabel;
     });
+  },
+
+  // Marks the device picker busy right after a speaker is picked — disables
+  // further picks and swaps the toggle's label to "Moving music…" until
+  // SPOTIFY_ACTION_DONE confirms the switch (transfer or not) is finished.
+  // Mutates the DOM directly rather than re-rendering, since a genuine
+  // transfer suppresses the poll updates that would otherwise rebuild this
+  // (see node_helper's _transferInProgress) — nothing else touches this
+  // picker again until the switch is done.
+  _setSpeakerSwitching() {
+    if (!this._devicePickerEl) return;
+    const toggle = this._devicePickerEl.querySelector(".mmm-spotify-sonos__device-picker-toggle");
+    if (toggle) {
+      toggle.dataset.defaultLabel = toggle.innerText;
+      toggle.disabled = true;
+      toggle.innerText = this.translate("SWITCHING_SPEAKER");
+    }
+    if (this._deviceListEl) {
+      this._deviceListEl.hidden = true;
+      this._deviceListEl.querySelectorAll(".mmm-spotify-sonos__device-picker-item").forEach((item) => {
+        item.disabled = true;
+      });
+    }
+  },
+
+  _clearSpeakerSwitching() {
+    if (!this._devicePickerEl) return;
+    const toggle = this._devicePickerEl.querySelector(".mmm-spotify-sonos__device-picker-toggle");
+    if (toggle && toggle.dataset.defaultLabel) {
+      toggle.disabled = false;
+      toggle.innerText = toggle.dataset.defaultLabel;
+    }
   },
 
   _renderResults() {

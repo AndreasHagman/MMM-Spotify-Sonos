@@ -15,6 +15,7 @@
   "SHOW_LESS": "Show less",
   "PLAYING_ON": "Playing on",
   "CHANGE_SPEAKER": "Change speaker",
+  "SWITCHING_SPEAKER": "Moving music…",
   "NO_ACTIVE_SPEAKER": "No active speaker — pick one first",
   "NO_DEVICES_FOUND": "No Sonos speakers found"
 }

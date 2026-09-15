@@ -15,6 +15,7 @@
   "SHOW_LESS": "Vis mindre",
   "PLAYING_ON": "Spiller på",
   "CHANGE_SPEAKER": "Bytt høyttaler",
+  "SWITCHING_SPEAKER": "Flytter musikk…",
   "NO_ACTIVE_SPEAKER": "Ingen aktiv høyttaler — velg en først",
   "NO_DEVICES_FOUND": "Fant ingen Sonos-høyttalere"
 }

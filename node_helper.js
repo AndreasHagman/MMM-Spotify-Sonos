@@ -85,15 +85,23 @@ module.exports = NodeHelper.create({
         const previousDeviceId = this.activeDeviceId;
         const nextDeviceId = payload?.deviceId || null;
         this.activeDeviceId = nextDeviceId;
-        if (previousDeviceId && nextDeviceId && previousDeviceId !== nextDeviceId) {
-          this._transferPlayback(previousDeviceId, nextDeviceId);
-        } else {
+        const isTransfer = Boolean(previousDeviceId && nextDeviceId && previousDeviceId !== nextDeviceId);
+        // A real transfer can take several seconds (one request per queued
+        // track) with nothing else on screen to show for it — this lets the
+        // frontend show a "moving…" state for exactly as long as it actually
+        // takes, rather than a fixed guess or nothing at all. Resolves near-
+        // instantly whenever this ISN'T a real transfer (nothing was playing
+        // on the old zone), so the indicator just never has time to show.
+        (isTransfer
+          ? this._transferPlayback(previousDeviceId, nextDeviceId)
           // Refresh immediately rather than waiting for the next poll tick (up
           // to pollInterval away) — otherwise picking a new speaker leaves the
           // overlay showing the PREVIOUS one's now-playing/progress/queue under
           // the new one's name for that whole interval.
-          this._refreshSonos();
-        }
+          : this._refreshSonos()
+        ).then(() => {
+          this.sendSocketNotification("SPOTIFY_ACTION_DONE", { action: "switchSpeaker" });
+        });
         break;
       }
     }
