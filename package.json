@@ -8,6 +8,15 @@
     "lint": "eslint *.js test/*.js"
   },
   "keywords": ["magicmirror", "spotify", "sonos", "music"],
+  "author": "Andreas Hagman <ajhagman@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AndreasHagman/MMM-Spotify-Sonos.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AndreasHagman/MMM-Spotify-Sonos/issues"
+  },
+  "homepage": "https://github.com/AndreasHagman/MMM-Spotify-Sonos#readme",
   "license": "MIT",
   "dependencies": {
     "sonos": "^1.14.3"

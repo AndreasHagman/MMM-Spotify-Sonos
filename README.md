@@ -163,3 +163,7 @@ been verified on real hardware yet — a Wayland-native keyboard (e.g.
 v1 supports track/playlist search, play now, add to queue, play/pause,
 skip next/previous, and device selection. Volume, shuffle, and repeat
 are intentionally out of scope for v1 (see the design spec).
+
+## License
+
+[MIT](LICENSE) © Andreas Hagman
