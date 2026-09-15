@@ -5,6 +5,29 @@ the queue, and choose which Sonos speaker or speaker group they play on
 — controlled directly over your local network, not through Spotify
 Connect (see "How playback control works" below).
 
+## Screenshots
+
+<!-- Paste a screenshot below each heading — drag & drop an image into
+     this file on github.com's editor and it'll insert the markdown for
+     you, or upload it under docs/screenshots/ and reference it with a
+     relative path. Remove any heading you don't have a screenshot for. -->
+
+### Closed (idle / now playing)
+
+<!-- e.g. ![Idle widget on the mirror](docs/screenshots/closed-idle.png) -->
+
+### Open (overlay)
+
+<!-- e.g. ![Overlay open](docs/screenshots/overlay-open.png) -->
+
+### Search
+
+<!-- e.g. ![Search results](docs/screenshots/search.png) -->
+
+### Up next / queue
+
+<!-- e.g. ![Up next queue](docs/screenshots/queue.png) -->
+
 ## Disclaimer & intended use
 
 **Intended use:** this module is a touchscreen control panel for playing
