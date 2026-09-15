@@ -306,8 +306,25 @@ module.exports = NodeHelper.create({
     return this.profile;
   },
 
-  _logout() {
+  // Logging out only affects this module's own Spotify Web API session
+  // (search/browse) — it can't touch Sonos's own, separate Spotify link, so
+  // playback would otherwise carry on regardless of anyone logging out. This
+  // pauses the zone this module was actually controlling, for a clean
+  // handoff, before clearing the login/session state.
+  async _logout() {
+    await this._pauseActiveZone();
     this._handleAuthFailure();
+  },
+
+  async _pauseActiveZone() {
+    const zone = this._findZone(this.activeDeviceId);
+    if (!zone) return;
+    try {
+      await this._sonosForZone(zone).pause();
+    } catch {
+      // Best-effort — a zone that's already stopped, or unreachable, isn't a
+      // reason to block logging out.
+    }
   },
 
   _startPolling() {
