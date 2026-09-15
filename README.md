@@ -19,14 +19,17 @@ Connect (see "How playback control works" below).
 <!-- e.g. ![Idle widget on the mirror](docs/screenshots/closed-idle.png) -->
 
 ### Open (overlay)
+<img width="1253" height="860" alt="image" src="https://github.com/user-attachments/assets/3f3ccf65-74e9-49a1-841c-ae9987d92cfc" />
 
 <!-- e.g. ![Overlay open](docs/screenshots/overlay-open.png) -->
 
 ### Search
+<img width="1242" height="907" alt="image" src="https://github.com/user-attachments/assets/2d2a714b-7d0b-4699-960c-a7877c60ec28" />
 
 <!-- e.g. ![Search results](docs/screenshots/search.png) -->
 
 ### Up next / queue
+<img width="632" height="595" alt="image" src="https://github.com/user-attachments/assets/31bb1468-c8ad-41c3-8a3d-18dc0f54b608" />
 
 <!-- e.g. ![Up next queue](docs/screenshots/queue.png) -->
 
