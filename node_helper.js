@@ -29,6 +29,7 @@ module.exports = NodeHelper.create({
     this.zones = [];
     this.sonosEntryPoint = null;
     this.keyboardProcess = null;
+    this.activeDeviceId = null;
   },
 
   stop() {
@@ -74,6 +75,14 @@ module.exports = NodeHelper.create({
         break;
       case "SPOTIFY_KEYBOARD_HIDE":
         this._hideKeyboard();
+        break;
+      case "SPOTIFY_SET_ACTIVE_DEVICE":
+        // Refresh immediately rather than waiting for the next poll tick (up
+        // to pollInterval away) — otherwise picking a new speaker leaves the
+        // overlay showing the PREVIOUS one's now-playing/progress/queue under
+        // the new one's name for that whole interval.
+        this.activeDeviceId = payload?.deviceId || null;
+        this._refreshSonos();
         break;
     }
   },
@@ -133,6 +142,10 @@ module.exports = NodeHelper.create({
     this.tokens = null;
     this.profile = null;
     this._refreshPromise = null;
+    // A different account logging back in shouldn't inherit this session's
+    // speaker choice — it should go through the same "no zone selected yet,
+    // auto-detect" bootstrap _refreshSonos() does for a genuinely fresh start.
+    this.activeDeviceId = null;
     deleteTokenFile(this._tokenFilePath());
     this.sendSocketNotification("SPOTIFY_AUTH_STATE", { loggedIn: false, profile: null });
   },
@@ -302,13 +315,76 @@ module.exports = NodeHelper.create({
 
   _sendEmptySonosState() {
     this.sendSocketNotification("SPOTIFY_DEVICES_RESULT", { devices: [] });
+    this._sendEmptyPlaybackAndQueue();
+  },
+
+  _sendEmptyPlaybackAndQueue() {
     this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null, progress: { position: null, duration: null } });
     this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { queue: [] });
   },
 
-  // One tick: discover zones, report the device list, and find whichever zone (if
-  // any) is playing Spotify content specifically — not just "something" — since this
-  // module's whole purpose is Spotify/speaker interaction, not general Sonos status.
+  // Reports the now-playing/progress/queue state for exactly this zone — never
+  // borrowed from a different one. Confirmed live: selecting a zone that isn't
+  // playing Spotify used to keep showing whatever zone WAS, under the newly
+  // selected zone's name (e.g. picking an idle Kjøkkenhøyttaler while
+  // Badhøyttaler was mid-playlist left the overlay claiming Kjøkkenhøyttaler
+  // was playing Badhøyttaler's track). An empty/idle result here is correct
+  // and expected whenever the selected zone isn't genuinely playing Spotify.
+  async _reportZonePlayback(deviceId) {
+    const zone = this._findZone(deviceId);
+    if (!zone) {
+      this._sendEmptyPlaybackAndQueue();
+      return;
+    }
+
+    const coordinator = this._sonosForZone(zone);
+    let track;
+    try {
+      track = await coordinator.currentTrack();
+    } catch {
+      this._sendEmptyPlaybackAndQueue();
+      return;
+    }
+
+    // A URI can technically contain "spotify" (e.g. a stale "x-sonos-vli:" self-
+    // reference left over on a speaker that was ungrouped mid-playback) while
+    // carrying no resolvable title — that's not a presentable "now playing" zone,
+    // so require both. This module is deliberately Spotify-only — a zone playing
+    // radio/TV/line-in reports as idle here rather than showing that instead.
+    if (!isSpotifyTrack(track) || !track?.title) {
+      this._sendEmptyPlaybackAndQueue();
+      return;
+    }
+
+    let state = "stopped";
+    try {
+      state = await coordinator.getCurrentState();
+    } catch {
+      // Leave state as "stopped" if we can't read it — still report the track.
+    }
+
+    this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", {
+      isPlaying: state === "playing",
+      device: { id: zone.id, name: zone.name },
+      track: shapeTrack(track),
+      progress: shapeProgress(track)
+    });
+
+    let queueItems = [];
+    try {
+      const queueResult = await coordinator.getQueue();
+      queueItems = upcomingQueueItems(queueResult?.items, track.queuePosition).map(shapeTrack);
+    } catch {
+      // Queue read failures aren't fatal — just show an empty "up next" list.
+    }
+    this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { queue: queueItems });
+  },
+
+  // One tick: discover zones and report the device list, then report playback
+  // for whichever zone is actually selected. Nothing selected yet (no login-
+  // session pick made) falls back to auto-detecting whichever zone is playing
+  // Spotify content, so a fresh overlay open lands on a sensible default —
+  // matching "if music's already playing, use that speaker automatically".
   async _refreshSonos() {
     let entryPoint;
     try {
@@ -331,52 +407,28 @@ module.exports = NodeHelper.create({
     this.zones = shapeZones(groups);
     this.sendSocketNotification("SPOTIFY_DEVICES_RESULT", { devices: this.zones.map(({ id, name }) => ({ id, name })) });
 
+    if (this.activeDeviceId) {
+      await this._reportZonePlayback(this.activeDeviceId);
+      return;
+    }
+
     for (const group of groups) {
       // A group whose coordinator can't be resolved has nothing to read (and would
       // throw an unhandled rejection out of this un-awaited method, killing the tick).
       if (typeof group.CoordinatorDevice !== "function") continue;
       let track;
-      let coordinator;
       try {
-        coordinator = group.CoordinatorDevice();
-        track = await coordinator.currentTrack();
+        track = await group.CoordinatorDevice().currentTrack();
       } catch {
         continue;
       }
-      // A URI can technically contain "spotify" (e.g. a stale "x-sonos-vli:" self-
-      // reference left over on a speaker that was ungrouped mid-playback) while
-      // carrying no resolvable title — that's not a presentable "now playing" zone,
-      // so require both.
       if (!isSpotifyTrack(track) || !track?.title) continue;
-
-      let state = "stopped";
-      try {
-        state = await coordinator.getCurrentState();
-      } catch {
-        // Leave state as "stopped" if we can't read it — still report the track/device.
-      }
-
-      this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", {
-        isPlaying: state === "playing",
-        device: { id: group.ID, name: group.Name },
-        track: shapeTrack(track),
-        progress: shapeProgress(track)
-      });
-
-      let queueItems = [];
-      try {
-        const queueResult = await coordinator.getQueue();
-        queueItems = upcomingQueueItems(queueResult?.items, track.queuePosition).map(shapeTrack);
-      } catch {
-        // Queue read failures aren't fatal — just show an empty "up next" list.
-      }
-      this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { queue: queueItems });
+      await this._reportZonePlayback(group.ID);
       return;
     }
 
     // No zone is playing Spotify content.
-    this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null, progress: { position: null, duration: null } });
-    this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { queue: [] });
+    this._sendEmptyPlaybackAndQueue();
   },
 
   async _search({ query }) {

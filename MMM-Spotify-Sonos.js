@@ -71,7 +71,13 @@ Module.register("MMM-Spotify-Sonos", {
         // Spotify content as the default target — this only fires once, the first
         // time a Spotify session is detected; after that the user (or this initial
         // adoption) owns activeDeviceId until they pick a different zone or log out.
-        if (!this.activeDeviceId && payload.device) this.activeDeviceId = payload.device.id;
+        // Telling the backend locks it in server-side too, so node_helper reports
+        // THIS zone specifically on every future tick instead of re-scanning all
+        // zones for "whichever one happens to be playing Spotify" indefinitely.
+        if (!this.activeDeviceId && payload.device) {
+          this.activeDeviceId = payload.device.id;
+          this.sendSocketNotification("SPOTIFY_SET_ACTIVE_DEVICE", { deviceId: this.activeDeviceId });
+        }
         this.updateDom();
         this._renderNowPlayingInfo();
         this._renderProgress();
@@ -405,6 +411,11 @@ Module.register("MMM-Spotify-Sonos", {
       item.addEventListener("click", () => {
         this.activeDeviceId = device.id;
         this._devicePickerExpanded = false;
+        // Tell the backend so it reports THIS zone's playback/queue specifically —
+        // otherwise the overlay kept showing whichever zone was ACTUALLY playing
+        // Spotify, mislabeled under the newly picked zone's name, until that other
+        // zone stopped.
+        this.sendSocketNotification("SPOTIFY_SET_ACTIVE_DEVICE", { deviceId: this.activeDeviceId });
         // Full re-render (not just hiding the list) so the "Playing on: X"
         // label picks up the new selection immediately.
         this._renderDevicePicker();
