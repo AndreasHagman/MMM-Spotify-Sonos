@@ -713,17 +713,40 @@ Module.register("MMM-Spotify-Sonos", {
     section.hidden = items.length === 0;
     if (items.length === 0) return;
 
-    const heading = document.createElement("h3");
-    heading.className = "mmm-spotify-sonos__section-heading";
-    heading.innerText = this.translate("UP_NEXT");
-    section.appendChild(heading);
-
     // A queue built from a big playlist can run to dozens of items — cap what's
     // shown so it doesn't push search results off screen, with a way to see
     // the rest on demand. 0/falsy `maxQueueItemsShown` means "no limit".
     const limit = this.config.maxQueueItemsShown;
-    const showingAll = this._queueExpanded || !limit || items.length <= limit;
+    const canCollapse = Boolean(limit) && items.length > limit;
+    const showingAll = this._queueExpanded || !canCollapse;
     const visibleItems = showingAll ? items : items.slice(0, limit);
+    const collapse = () => {
+      this._queueExpanded = false;
+      this._renderQueue();
+    };
+
+    const headingRow = document.createElement("div");
+    headingRow.className = "mmm-spotify-sonos__queue-heading-row";
+
+    const heading = document.createElement("h3");
+    heading.className = "mmm-spotify-sonos__section-heading";
+    heading.innerText = this.translate("UP_NEXT");
+    headingRow.appendChild(heading);
+
+    // A long expanded list can run well past a screen's height — a minimize
+    // control only at the bottom would mean scrolling all the way back down
+    // just to collapse it again, so this mirrors it up here too.
+    if (canCollapse && this._queueExpanded) {
+      const minimizeBtn = document.createElement("button");
+      minimizeBtn.type = "button";
+      minimizeBtn.className = "mmm-spotify-sonos__queue-minimize-top";
+      minimizeBtn.innerText = "▲";
+      minimizeBtn.setAttribute("aria-label", this.translate("SHOW_LESS"));
+      minimizeBtn.addEventListener("click", collapse);
+      headingRow.appendChild(minimizeBtn);
+    }
+
+    section.appendChild(headingRow);
 
     const list = document.createElement("div");
     list.className = "mmm-spotify-sonos__queue-list";
@@ -756,16 +779,21 @@ Module.register("MMM-Spotify-Sonos", {
     });
     section.appendChild(list);
 
-    if (!showingAll) {
-      const showMoreBtn = document.createElement("button");
-      showMoreBtn.type = "button";
-      showMoreBtn.className = "mmm-spotify-sonos__queue-show-more";
-      showMoreBtn.innerText = this.translate("SHOW_MORE", { count: items.length - limit });
-      showMoreBtn.addEventListener("click", () => {
-        this._queueExpanded = true;
-        this._renderQueue();
-      });
-      section.appendChild(showMoreBtn);
+    if (canCollapse) {
+      const toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = "mmm-spotify-sonos__queue-show-more";
+      if (this._queueExpanded) {
+        toggleBtn.innerText = this.translate("SHOW_LESS");
+        toggleBtn.addEventListener("click", collapse);
+      } else {
+        toggleBtn.innerText = this.translate("SHOW_MORE", { count: items.length - limit });
+        toggleBtn.addEventListener("click", () => {
+          this._queueExpanded = true;
+          this._renderQueue();
+        });
+      }
+      section.appendChild(toggleBtn);
     }
   },
 

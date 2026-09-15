@@ -12,6 +12,7 @@
   "ADD_TO_QUEUE_PENDING": "Adding…",
   "UP_NEXT": "Up next",
   "SHOW_MORE": "Show {count} more",
+  "SHOW_LESS": "Show less",
   "PLAYING_ON": "Playing on",
   "CHANGE_SPEAKER": "Change speaker",
   "NO_ACTIVE_SPEAKER": "No active speaker — pick one first",

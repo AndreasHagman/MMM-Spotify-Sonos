@@ -12,6 +12,7 @@
   "ADD_TO_QUEUE_PENDING": "Legger til…",
   "UP_NEXT": "Neste opp",
   "SHOW_MORE": "Vis {count} til",
+  "SHOW_LESS": "Vis mindre",
   "PLAYING_ON": "Spiller på",
   "CHANGE_SPEAKER": "Bytt høyttaler",
   "NO_ACTIVE_SPEAKER": "Ingen aktiv høyttaler — velg en først",

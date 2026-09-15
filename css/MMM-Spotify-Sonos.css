@@ -529,6 +529,36 @@
   color: #fff;
 }
 
+.mmm-spotify-sonos__queue-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.mmm-spotify-sonos__queue-heading-row .mmm-spotify-sonos__section-heading {
+  flex: 1;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.mmm-spotify-sonos__queue-minimize-top {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.75em;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+  flex: none;
+}
+
+.mmm-spotify-sonos__queue-minimize-top:hover {
+  color: #fff;
+}
+
 .mmm-spotify-sonos__queue-name {
   font-size: 0.9em;
   font-weight: 600;
