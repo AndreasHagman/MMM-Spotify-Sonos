@@ -5,6 +5,25 @@ the queue, and choose which Sonos speaker or speaker group they play on
 — controlled directly over your local network, not through Spotify
 Connect (see "How playback control works" below).
 
+## Disclaimer & intended use
+
+**Intended use:** this module is a touchscreen control panel for playing
+or queuing Spotify tracks/playlists on Sonos speakers already set up on
+your home network — nothing more. It's not a general Spotify remote and
+not a full Sonos control panel (no volume, shuffle, repeat, or
+non-Spotify sources — see "Scope" below).
+
+**Spotify's Web API is used only for logging in, searching, and reading
+your own playlists.** It is deliberately **not** used to control
+playback: Spotify's public Web API cannot control a Sonos speaker at
+all (confirmed by testing against real hardware — Sonos never appears
+in Spotify's device list, and every playback command returns 403
+Forbidden, regardless). So instead, all actual playback — play now,
+queue, play/pause, skip — talks directly to your Sonos speakers over
+the local network via the `sonos` npm library (the same one `MMM-Sonos`
+uses), bypassing Spotify Connect entirely. See "How playback control
+works" below for the full explanation.
+
 ## Requirements
 
 - A **Spotify Premium** account — required by Sonos's own Spotify
