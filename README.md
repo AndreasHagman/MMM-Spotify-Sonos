@@ -45,7 +45,10 @@ non-Spotify sources — see "Scope" below).
 solve a need in my own home (a shared touchscreen control panel for
 Spotify + Sonos), with the help of AI coding tools. It's shared as-is,
 in case it's useful to someone else with a similar setup — not as a
-maintained, general-purpose product.
+maintained, general-purpose product. That said, feel free to leave
+comments, suggestions, or bug reports via
+[GitHub Issues](https://github.com/AndreasHagman/MMM-Spotify-Sonos/issues)
+— I'll try to maintain it as best I can.
 
 **Spotify's Web API is used only for logging in, searching, and reading
 your own playlists.** It is deliberately **not** used to control
