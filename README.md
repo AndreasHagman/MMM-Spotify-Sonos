@@ -13,6 +13,8 @@ Connect (see "How playback control works" below).
      relative path. Remove any heading you don't have a screenshot for. -->
 
 ### Closed (idle / now playing)
+<img width="542" height="238" alt="image" src="https://github.com/user-attachments/assets/9cb97439-5857-4245-9008-a850631bb78d" />
+<img width="545" height="240" alt="image" src="https://github.com/user-attachments/assets/125993fd-5d04-4b9f-89e9-a3564297f4cd" />
 
 <!-- e.g. ![Idle widget on the mirror](docs/screenshots/closed-idle.png) -->
 
