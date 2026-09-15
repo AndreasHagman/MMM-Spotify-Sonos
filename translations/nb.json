@@ -7,9 +7,13 @@
   "TRACKS": "Låter",
   "PLAYLISTS": "Spillelister",
   "PLAY_NOW": "Spill nå",
+  "PLAY_NOW_PENDING": "Starter…",
   "ADD_TO_QUEUE": "Legg i kø",
+  "ADD_TO_QUEUE_PENDING": "Legger til…",
   "UP_NEXT": "Neste opp",
+  "SHOW_MORE": "Vis {count} til",
   "PLAYING_ON": "Spiller på",
+  "CHANGE_SPEAKER": "Bytt høyttaler",
   "NO_ACTIVE_SPEAKER": "Ingen aktiv høyttaler — velg en først",
   "NO_DEVICES_FOUND": "Fant ingen Sonos-høyttalere"
 }

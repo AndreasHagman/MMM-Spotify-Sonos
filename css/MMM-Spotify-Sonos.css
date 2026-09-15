@@ -171,6 +171,17 @@
   flex: none;
 }
 
+.mmm-spotify-sonos__device-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mmm-spotify-sonos__device-picker-label {
+  font-size: 0.95em;
+  opacity: 0.85;
+}
+
 .mmm-spotify-sonos__device-picker-toggle {
   background: rgba(255, 255, 255, 0.1);
   border: none;
@@ -347,6 +358,11 @@
   background: #1ed760;
 }
 
+.mmm-spotify-sonos__result-action--busy {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* --- Error banner + queue ----------------------------------------------------- */
 
 .mmm-spotify-sonos__overlay-error {
@@ -383,6 +399,21 @@
   background: rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   padding: 0.4rem 0.7rem;
+}
+
+.mmm-spotify-sonos__queue-show-more {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85em;
+  padding: 0.4rem 0;
+  cursor: pointer;
+  text-align: left;
+  align-self: flex-start;
+}
+
+.mmm-spotify-sonos__queue-show-more:hover {
+  color: #fff;
 }
 
 .mmm-spotify-sonos__queue-name {

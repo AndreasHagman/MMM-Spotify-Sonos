@@ -432,6 +432,12 @@ module.exports = NodeHelper.create({
       await sonos.queue(uri);
       await sonos.selectQueue();
       await sonos.play();
+      // A playlist can take several seconds to start (Sonos has to expand it
+      // before playback begins) with no other feedback on screen, so push the
+      // new state out immediately instead of leaving the frontend to wait for
+      // the next poll tick (up to `pollInterval` away) to find out it worked.
+      await this._refreshSonos();
+      this.sendSocketNotification("SPOTIFY_ACTION_DONE", { action: "playNow" });
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not start playback: ${err.message}` });
     }
@@ -445,6 +451,8 @@ module.exports = NodeHelper.create({
     }
     try {
       await this._sonosForZone(zone).queue(uri);
+      await this._refreshSonos();
+      this.sendSocketNotification("SPOTIFY_ACTION_DONE", { action: "queueAdd" });
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not add to queue: ${err.message}` });
     }

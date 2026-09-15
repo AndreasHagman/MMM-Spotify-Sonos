@@ -9,7 +9,8 @@ Module.register("MMM-Spotify-Sonos", {
     maxSearchResults: 10,
     sonosSpotifyRegion: "2311",
     sonosDiscoveryTimeout: 5000,
-    virtualKeyboardCommand: null
+    virtualKeyboardCommand: null,
+    maxQueueItemsShown: 5
   },
 
   start() {
@@ -24,6 +25,8 @@ Module.register("MMM-Spotify-Sonos", {
     this.searchResults = { tracks: [], playlists: [] };
     this.queue = { queue: [] };
     this._searchDebounceTimer = null;
+    this._queueExpanded = false;
+    this._devicePickerExpanded = false;
     this.sendSocketNotification("SPOTIFY_CONFIG", this.config);
   },
 
@@ -71,6 +74,14 @@ Module.register("MMM-Spotify-Sonos", {
         Log.error(`[MMM-Spotify-Sonos] ${payload.message}`);
         this.updateDom();
         this._renderError();
+        this._clearBusyButtons();
+        break;
+      // Sent once a Play now / Add to queue call actually finishes talking to
+      // Sonos — a single track resolves almost immediately, but a playlist can
+      // take a few seconds (Sonos has to expand it before it can play), and
+      // without this the button gave no sign anything was happening at all.
+      case "SPOTIFY_ACTION_DONE":
+        this._clearBusyButtons();
         break;
       case "SPOTIFY_DEVICES_RESULT":
         this.devices = payload.devices;
@@ -275,6 +286,10 @@ Module.register("MMM-Spotify-Sonos", {
 
   _closeOverlay() {
     this.overlayOpen = false;
+    // Both start collapsed again next time the overlay opens, rather than
+    // carrying over whatever was expanded from a previous visit.
+    this._queueExpanded = false;
+    this._devicePickerExpanded = false;
     if (this._overlayEl) {
       // Removing a focused input from the DOM doesn't reliably fire its own
       // "blur" first (browser-dependent), so this is the backstop that keeps
@@ -302,14 +317,34 @@ Module.register("MMM-Spotify-Sonos", {
     // could be), so activeDeviceId reliably matches an entry in this.devices once set
     // — no fallback needed here.
     const activeDevice = this.devices.find((d) => d.id === this.activeDeviceId);
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "mmm-spotify-sonos__device-picker-toggle";
-    toggle.innerText = `${this.translate("PLAYING_ON")}: ${activeDevice?.name || "—"} ▾`;
+
+    // A single row: the current speaker as plain text, and a separate button
+    // to reveal the picker — rather than one big toggle pill — so the active
+    // speaker's name doesn't look like part of a control you have to tap.
+    const row = document.createElement("div");
+    row.className = "mmm-spotify-sonos__device-picker-row";
+
+    const label = document.createElement("span");
+    label.className = "mmm-spotify-sonos__device-picker-label";
+    label.innerText = `${this.translate("PLAYING_ON")}: ${activeDevice?.name || "—"}`;
+    row.appendChild(label);
 
     const list = document.createElement("div");
     list.className = "mmm-spotify-sonos__device-picker-list";
-    list.hidden = true;
+    // Rebuilt (and this.devices.length === 0) on every poll tick, so this state
+    // has to live on `this`, not just on the DOM node, or an unrelated re-render
+    // would silently close it again a few seconds after opening it.
+    list.hidden = !this._devicePickerExpanded;
+
+    const changeBtn = document.createElement("button");
+    changeBtn.type = "button";
+    changeBtn.className = "mmm-spotify-sonos__device-picker-toggle";
+    changeBtn.innerText = this.translate("CHANGE_SPEAKER");
+    changeBtn.addEventListener("click", () => {
+      this._devicePickerExpanded = !this._devicePickerExpanded;
+      list.hidden = !this._devicePickerExpanded;
+    });
+    row.appendChild(changeBtn);
 
     if (this.devices.length === 0) {
       const empty = document.createElement("div");
@@ -325,17 +360,15 @@ Module.register("MMM-Spotify-Sonos", {
       item.innerText = device.name;
       item.addEventListener("click", () => {
         this.activeDeviceId = device.id;
-        list.hidden = true;
+        this._devicePickerExpanded = false;
+        // Full re-render (not just hiding the list) so the "Playing on: X"
+        // label picks up the new selection immediately.
         this._renderDevicePicker();
       });
       list.appendChild(item);
     });
 
-    toggle.addEventListener("click", () => {
-      list.hidden = !list.hidden;
-    });
-
-    container.appendChild(toggle);
+    container.appendChild(row);
     container.appendChild(list);
     this._deviceListEl = list;
   },
@@ -423,7 +456,7 @@ Module.register("MMM-Spotify-Sonos", {
     playBtn.type = "button";
     playBtn.className = "mmm-spotify-sonos__result-action mmm-spotify-sonos__result-action--primary";
     playBtn.innerText = this.translate("PLAY_NOW");
-    playBtn.addEventListener("click", () => this._handlePlayNow(item));
+    playBtn.addEventListener("click", () => this._handlePlayNow(item, playBtn));
     actions.appendChild(playBtn);
 
     // Playlists aren't offered an "Add to queue" button in v1 — queueing a whole
@@ -435,7 +468,7 @@ Module.register("MMM-Spotify-Sonos", {
       queueBtn.type = "button";
       queueBtn.className = "mmm-spotify-sonos__result-action";
       queueBtn.innerText = this.translate("ADD_TO_QUEUE");
-      queueBtn.addEventListener("click", () => this._handleQueueAdd(item));
+      queueBtn.addEventListener("click", () => this._handleQueueAdd(item, queueBtn));
       actions.appendChild(queueBtn);
     }
 
@@ -447,7 +480,7 @@ Module.register("MMM-Spotify-Sonos", {
     return Boolean(this.activeDeviceId);
   },
 
-  _handlePlayNow(item) {
+  _handlePlayNow(item, btn) {
     if (!this._hasPlaybackTarget()) {
       // Just unhiding the list isn't enough — it lives at the top of the overlay,
       // while the result you tapped can be scrolled far below it, so the list can
@@ -455,21 +488,51 @@ Module.register("MMM-Spotify-Sonos", {
       this.lastError = this.translate("NO_ACTIVE_SPEAKER");
       this._renderError();
       if (this._deviceListEl) {
+        this._devicePickerExpanded = true;
         this._deviceListEl.hidden = false;
         this._deviceListEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
       return;
     }
+    // Starting a playlist can take several seconds (Sonos has to expand it
+    // before playback actually begins) with nothing else on screen to show
+    // for it, so mark the button busy immediately rather than leave it
+    // looking like the tap did nothing.
+    this._setButtonBusy(btn, this.translate("PLAY_NOW_PENDING"));
     this.sendSocketNotification("SPOTIFY_PLAY_NOW", { deviceId: this.activeDeviceId, uri: item.uri });
   },
 
-  _handleQueueAdd(item) {
+  _handleQueueAdd(item, btn) {
     if (!this._hasPlaybackTarget()) {
       this.lastError = this.translate("NO_ACTIVE_SPEAKER");
       this._renderError();
       return;
     }
+    this._setButtonBusy(btn, this.translate("ADD_TO_QUEUE_PENDING"));
     this.sendSocketNotification("SPOTIFY_QUEUE_ADD", { uri: item.uri, deviceId: this.activeDeviceId });
+  },
+
+  _setButtonBusy(btn, pendingLabel) {
+    if (!btn || btn.disabled) return;
+    // Stashed lazily so this works regardless of which translation the button
+    // was originally built with.
+    btn.dataset.defaultLabel = btn.innerText;
+    btn.disabled = true;
+    btn.classList.add("mmm-spotify-sonos__result-action--busy");
+    btn.innerText = pendingLabel;
+  },
+
+  // Restores every result button this session left mid-action — at most one
+  // in practice, but harmless to sweep all of them. A fresh search rebuilds
+  // _resultsEl from scratch anyway, so there's nothing stale to find once
+  // that happens.
+  _clearBusyButtons() {
+    if (!this._resultsEl) return;
+    this._resultsEl.querySelectorAll(".mmm-spotify-sonos__result-action--busy").forEach((btn) => {
+      btn.disabled = false;
+      btn.classList.remove("mmm-spotify-sonos__result-action--busy");
+      if (btn.dataset.defaultLabel) btn.innerText = btn.dataset.defaultLabel;
+    });
   },
 
   _renderResults() {
@@ -510,9 +573,16 @@ Module.register("MMM-Spotify-Sonos", {
     heading.innerText = this.translate("UP_NEXT");
     section.appendChild(heading);
 
+    // A queue built from a big playlist can run to dozens of items — cap what's
+    // shown so it doesn't push search results off screen, with a way to see
+    // the rest on demand. 0/falsy `maxQueueItemsShown` means "no limit".
+    const limit = this.config.maxQueueItemsShown;
+    const showingAll = this._queueExpanded || !limit || items.length <= limit;
+    const visibleItems = showingAll ? items : items.slice(0, limit);
+
     const list = document.createElement("div");
     list.className = "mmm-spotify-sonos__queue-list";
-    items.forEach((item) => {
+    visibleItems.forEach((item) => {
       const row = document.createElement("div");
       row.className = "mmm-spotify-sonos__queue-row";
 
@@ -529,6 +599,18 @@ Module.register("MMM-Spotify-Sonos", {
       list.appendChild(row);
     });
     section.appendChild(list);
+
+    if (!showingAll) {
+      const showMoreBtn = document.createElement("button");
+      showMoreBtn.type = "button";
+      showMoreBtn.className = "mmm-spotify-sonos__queue-show-more";
+      showMoreBtn.innerText = this.translate("SHOW_MORE", { count: items.length - limit });
+      showMoreBtn.addEventListener("click", () => {
+        this._queueExpanded = true;
+        this._renderQueue();
+      });
+      section.appendChild(showMoreBtn);
+    }
   },
 
   _renderError() {

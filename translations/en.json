@@ -7,9 +7,13 @@
   "TRACKS": "Tracks",
   "PLAYLISTS": "Playlists",
   "PLAY_NOW": "Play now",
+  "PLAY_NOW_PENDING": "Starting…",
   "ADD_TO_QUEUE": "Add to queue",
+  "ADD_TO_QUEUE_PENDING": "Adding…",
   "UP_NEXT": "Up next",
+  "SHOW_MORE": "Show {count} more",
   "PLAYING_ON": "Playing on",
+  "CHANGE_SPEAKER": "Change speaker",
   "NO_ACTIVE_SPEAKER": "No active speaker — pick one first",
   "NO_DEVICES_FOUND": "No Sonos speakers found"
 }

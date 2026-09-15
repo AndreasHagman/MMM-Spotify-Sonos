@@ -180,6 +180,7 @@ been verified on real hardware yet — a Wayland-native keyboard (e.g.
 | `sonosSpotifyRegion`     | `'2311'` (Europe)                | Spotify region code used when generating Sonos playback metadata — change for non-European households |
 | `sonosDiscoveryTimeout`  | `5000`                           | Milliseconds to wait when discovering Sonos zones on the network                                      |
 | `virtualKeyboardCommand` | `null`                           | Command (string or `[command, ...args]`) to show an on-screen keyboard — see above. Off by default    |
+| `maxQueueItemsShown`     | `5`                              | How many "Up next" items to show before collapsing the rest behind a "Show more" button. `0`/`null` shows the whole queue |
 
 ## Scope
 
