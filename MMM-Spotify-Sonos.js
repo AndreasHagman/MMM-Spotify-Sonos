@@ -8,7 +8,8 @@ Module.register("MMM-Spotify-Sonos", {
     searchDebounce: 450,
     maxSearchResults: 10,
     sonosSpotifyRegion: "2311",
-    sonosDiscoveryTimeout: 5000
+    sonosDiscoveryTimeout: 5000,
+    virtualKeyboardCommand: null
   },
 
   start() {
@@ -275,6 +276,10 @@ Module.register("MMM-Spotify-Sonos", {
   _closeOverlay() {
     this.overlayOpen = false;
     if (this._overlayEl) {
+      // Removing a focused input from the DOM doesn't reliably fire its own
+      // "blur" first (browser-dependent), so this is the backstop that keeps
+      // a virtual keyboard from being left open behind a closed overlay.
+      this.sendSocketNotification("SPOTIFY_KEYBOARD_HIDE");
       this._overlayEl.remove();
       this._overlayEl = null;
       this._overlayBodyEl = null;
@@ -381,6 +386,10 @@ Module.register("MMM-Spotify-Sonos", {
     input.className = "mmm-spotify-sonos__search-input";
     input.placeholder = this.translate("SEARCH_PLACEHOLDER");
     input.addEventListener("input", () => this._debouncedSearch(input.value));
+    // These fire regardless of virtualKeyboardCommand being configured — the
+    // backend is what decides whether a keyboard actually exists to show.
+    input.addEventListener("focus", () => this.sendSocketNotification("SPOTIFY_KEYBOARD_SHOW"));
+    input.addEventListener("blur", () => this.sendSocketNotification("SPOTIFY_KEYBOARD_HIDE"));
     return input;
   },
 

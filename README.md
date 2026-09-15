@@ -89,17 +89,53 @@ playlist, the way Spotify's own queue view does.
   surface as an error — just a note if you're wondering why results are
   capped lower than you configured.
 
+## On-screen keyboard (touchscreen kiosks)
+
+This module is built for a touchscreen with no physical keyboard, but
+Electron doesn't invoke any OS on-screen keyboard on input focus, on any
+platform — tapping the search box won't pop one up by itself. Rather than
+build a keyboard into the module, it shells out to whatever virtual
+keyboard binary you configure via `virtualKeyboardCommand`, starting it
+when the search box is focused and closing it on blur (or when the
+overlay closes). Leave it unset (the default) and this is a no-op.
+
+On a Raspberry Pi kiosk, [matchbox-keyboard](https://github.com/matchbox-project/matchbox-keyboard)
+is a common choice:
+
+```bash
+sudo apt install matchbox-keyboard
+```
+
+```js
+{
+  module: "MMM-Spotify-Sonos",
+  config: {
+    // ...
+    virtualKeyboardCommand: "matchbox-keyboard"
+  }
+}
+```
+
+`virtualKeyboardCommand` also accepts a `[command, ...args]` array for a
+keyboard that needs flags, e.g. `["wvkbd-mobintl", "-l", "landscape"]`.
+
+Note: matchbox-keyboard is an X11 app. On a Wayland-based Pi desktop
+(labwc, wayfire, etc.) it should still run via XWayland, but this hasn't
+been verified on real hardware yet — a Wayland-native keyboard (e.g.
+`wvkbd`, `squeekboard`) may be a better fit there.
+
 ## Config options
 
-| Option                  | Default                          | Description                                                                                           |
-| ----------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `clientId`              | _(required)_                     | Spotify Developer App Client ID                                                                       |
-| `redirectUri`           | `http://127.0.0.1:8888/callback` | Must match the app's registered Redirect URI                                                          |
-| `pollInterval`          | `7000`                           | How often (ms) now-playing state and Sonos zones are polled                                           |
-| `searchDebounce`        | `450`                            | Live-search debounce (ms)                                                                             |
-| `maxSearchResults`      | `10`                             | Max results per section (tracks/playlists) — see "Search limit" above                                 |
-| `sonosSpotifyRegion`    | `'2311'` (Europe)                | Spotify region code used when generating Sonos playback metadata — change for non-European households |
-| `sonosDiscoveryTimeout` | `5000`                           | Milliseconds to wait when discovering Sonos zones on the network                                      |
+| Option                   | Default                          | Description                                                                                           |
+| ------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `clientId`               | _(required)_                     | Spotify Developer App Client ID                                                                       |
+| `redirectUri`            | `http://127.0.0.1:8888/callback` | Must match the app's registered Redirect URI                                                          |
+| `pollInterval`           | `7000`                           | How often (ms) now-playing state and Sonos zones are polled                                           |
+| `searchDebounce`         | `450`                            | Live-search debounce (ms)                                                                             |
+| `maxSearchResults`       | `10`                             | Max results per section (tracks/playlists) — see "Search limit" above                                 |
+| `sonosSpotifyRegion`     | `'2311'` (Europe)                | Spotify region code used when generating Sonos playback metadata — change for non-European households |
+| `sonosDiscoveryTimeout`  | `5000`                           | Milliseconds to wait when discovering Sonos zones on the network                                      |
+| `virtualKeyboardCommand` | `null`                           | Command (string or `[command, ...args]`) to show an on-screen keyboard — see above. Off by default    |
 
 ## Scope
 

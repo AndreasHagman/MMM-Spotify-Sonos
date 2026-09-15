@@ -3,11 +3,13 @@
 const NodeHelper = require("node_helper");
 const Log = require("logger");
 const path = require("node:path");
+const { spawn } = require("node:child_process");
 const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshAccessToken, generateCodeVerifier, generateCodeChallenge, generateState, buildAuthorizeUrl, exchangeCodeForTokens, startCallbackServer } = require("./spotify-auth");
 const { spotifyRequest } = require("./spotify-request");
 const { shapeSearchResults, shapeOwnPlaylists, mergePlaylists } = require("./spotify-shape");
 const { AsyncDeviceDiscovery, Sonos } = require("sonos");
 const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems } = require("./sonos-shape");
+const { resolveKeyboardCommand } = require("./virtual-keyboard");
 
 // Spotify requires HTTPS redirect URIs except for the loopback IP literal
 // 127.0.0.1 (the hostname "localhost" is NOT exempted, even though it
@@ -26,6 +28,7 @@ module.exports = NodeHelper.create({
     this._refreshPromise = null;
     this.zones = [];
     this.sonosEntryPoint = null;
+    this.keyboardProcess = null;
   },
 
   stop() {
@@ -34,6 +37,7 @@ module.exports = NodeHelper.create({
       this.authServer.close();
       this.authServer = null;
     }
+    this._hideKeyboard();
   },
 
   socketNotificationReceived(notification, payload) {
@@ -65,6 +69,12 @@ module.exports = NodeHelper.create({
       case "SPOTIFY_SKIP":
         this._skip(payload || {});
         break;
+      case "SPOTIFY_KEYBOARD_SHOW":
+        this._showKeyboard();
+        break;
+      case "SPOTIFY_KEYBOARD_HIDE":
+        this._hideKeyboard();
+        break;
     }
   },
 
@@ -76,7 +86,8 @@ module.exports = NodeHelper.create({
         searchDebounce: 450,
         maxSearchResults: 10,
         sonosSpotifyRegion: "2311",
-        sonosDiscoveryTimeout: 5000
+        sonosDiscoveryTimeout: 5000,
+        virtualKeyboardCommand: null
       },
       config
     );
@@ -452,6 +463,43 @@ module.exports = NodeHelper.create({
     } catch (err) {
       this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not toggle playback: ${err.message}` });
     }
+  },
+
+  // Electron doesn't invoke any OS on-screen keyboard on input focus, on any
+  // platform — so on a touchscreen kiosk (the target device for this module)
+  // nothing pops up when the search box is tapped unless something explicitly
+  // shows one. This shells out to whatever virtual keyboard binary the user
+  // configured (e.g. "matchbox-keyboard" on a Raspberry Pi) rather than
+  // building one in-page, so it works with whatever the host OS already
+  // provides. Left unconfigured (the default), both methods are no-ops.
+  _showKeyboard() {
+    if (this.keyboardProcess) return; // already showing
+    const resolved = resolveKeyboardCommand(this.config.virtualKeyboardCommand);
+    if (!resolved) return; // feature not configured
+
+    let child;
+    try {
+      child = spawn(resolved.command, resolved.args, { stdio: "ignore" });
+    } catch (err) {
+      Log.warn(`[MMM-Spotify-Sonos] Could not start virtual keyboard "${resolved.command}": ${err.message}`);
+      return;
+    }
+    this.keyboardProcess = child;
+    child.on("error", (err) => {
+      Log.warn(`[MMM-Spotify-Sonos] Could not start virtual keyboard "${resolved.command}": ${err.message}`);
+      if (this.keyboardProcess === child) this.keyboardProcess = null;
+    });
+    // The user's own keyboard has a close button too — this keeps our
+    // reference from going stale if they use it instead of tapping away.
+    child.on("exit", () => {
+      if (this.keyboardProcess === child) this.keyboardProcess = null;
+    });
+  },
+
+  _hideKeyboard() {
+    if (!this.keyboardProcess) return;
+    this.keyboardProcess.kill();
+    this.keyboardProcess = null;
   },
 
   async _skip({ deviceId, direction }) {

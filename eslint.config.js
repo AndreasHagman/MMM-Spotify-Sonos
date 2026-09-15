@@ -16,7 +16,7 @@ module.exports = [
     }
   },
   {
-    files: ["node_helper.js", "spotify-auth.js", "spotify-shape.js", "spotify-request.js", "sonos-shape.js"],
+    files: ["node_helper.js", "spotify-auth.js", "spotify-shape.js", "spotify-request.js", "sonos-shape.js", "virtual-keyboard.js"],
     languageOptions: {
       ecmaVersion: 2021,
       sourceType: "script",
