@@ -41,6 +41,12 @@ your home network — nothing more. It's not a general Spotify remote and
 not a full Sonos control panel (no volume, shuffle, repeat, or
 non-Spotify sources — see "Scope" below).
 
+**Built for personal use, with AI assistance:** this module was built to
+solve a need in my own home (a shared touchscreen control panel for
+Spotify + Sonos), with the help of AI coding tools. It's shared as-is,
+in case it's useful to someone else with a similar setup — not as a
+maintained, general-purpose product.
+
 **Spotify's Web API is used only for logging in, searching, and reading
 your own playlists.** It is deliberately **not** used to control
 playback: Spotify's public Web API cannot control a Sonos speaker at
