@@ -8,7 +8,7 @@ const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshA
 const { spotifyRequest } = require("./spotify-request");
 const { shapeSearchResults, shapeOwnPlaylists, mergePlaylists } = require("./spotify-shape");
 const { AsyncDeviceDiscovery, Sonos } = require("sonos");
-const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems, shapeProgress } = require("./sonos-shape");
+const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems, shapeProgress, transferQueueUris } = require("./sonos-shape");
 const { resolveKeyboardCommand } = require("./virtual-keyboard");
 
 // Spotify requires HTTPS redirect URIs except for the loopback IP literal
@@ -30,6 +30,7 @@ module.exports = NodeHelper.create({
     this.sonosEntryPoint = null;
     this.keyboardProcess = null;
     this.activeDeviceId = null;
+    this._transferInProgress = false;
   },
 
   stop() {
@@ -76,14 +77,25 @@ module.exports = NodeHelper.create({
       case "SPOTIFY_KEYBOARD_HIDE":
         this._hideKeyboard();
         break;
-      case "SPOTIFY_SET_ACTIVE_DEVICE":
-        // Refresh immediately rather than waiting for the next poll tick (up
-        // to pollInterval away) — otherwise picking a new speaker leaves the
-        // overlay showing the PREVIOUS one's now-playing/progress/queue under
-        // the new one's name for that whole interval.
-        this.activeDeviceId = payload?.deviceId || null;
-        this._refreshSonos();
+      case "SPOTIFY_SET_ACTIVE_DEVICE": {
+        // There's only ever one Spotify session in this house — switching the
+        // target speaker should feel like Spotify Connect's own device switch
+        // (the music moves with you), not like starting over on a silent
+        // speaker while the old one keeps playing in the background.
+        const previousDeviceId = this.activeDeviceId;
+        const nextDeviceId = payload?.deviceId || null;
+        this.activeDeviceId = nextDeviceId;
+        if (previousDeviceId && nextDeviceId && previousDeviceId !== nextDeviceId) {
+          this._transferPlayback(previousDeviceId, nextDeviceId);
+        } else {
+          // Refresh immediately rather than waiting for the next poll tick (up
+          // to pollInterval away) — otherwise picking a new speaker leaves the
+          // overlay showing the PREVIOUS one's now-playing/progress/queue under
+          // the new one's name for that whole interval.
+          this._refreshSonos();
+        }
         break;
+      }
     }
   },
 
@@ -323,6 +335,83 @@ module.exports = NodeHelper.create({
     this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { queue: [] });
   },
 
+  // Moves the current track + everything still queued from one zone to
+  // another, so picking a different speaker via "Change speaker" feels like
+  // Spotify Connect's own device switch — one session moving with you —
+  // rather than starting from scratch while the old speaker keeps playing.
+  // The track restarts from 0:00 on the new speaker rather than resuming at
+  // its exact position; a deliberate simplification, not a bug.
+  async _transferPlayback(fromDeviceId, toDeviceId) {
+    const fromZone = this._findZone(fromDeviceId);
+    const toZone = this._findZone(toDeviceId);
+    if (!fromZone || !toZone) {
+      await this._refreshSonos();
+      return;
+    }
+
+    const fromCoordinator = this._sonosForZone(fromZone);
+    let track;
+    try {
+      track = await fromCoordinator.currentTrack();
+    } catch {
+      await this._refreshSonos();
+      return;
+    }
+
+    // Nothing genuinely playing on the old zone to move — just switch targets,
+    // same as if nothing had ever been playing anywhere.
+    if (!isSpotifyTrack(track) || !track?.title) {
+      await this._refreshSonos();
+      return;
+    }
+
+    let queueResult;
+    try {
+      queueResult = await fromCoordinator.getQueue();
+    } catch {
+      queueResult = null;
+    }
+    const urisToQueue = transferQueueUris(queueResult?.items, track.queuePosition, track.uri);
+
+    let wasPlaying = false;
+    try {
+      wasPlaying = (await fromCoordinator.getCurrentState()) === "playing";
+    } catch {
+      // Assume paused if unreadable — safer than surprising a paused session
+      // into blasting on the new speaker.
+    }
+
+    try {
+      await fromCoordinator.pause();
+    } catch {
+      // The old zone failing to pause isn't a reason to abandon the transfer.
+    }
+
+    // Re-queuing can take a while (one request per track — confirmed live: ~150
+    // tracks took upwards of 15 seconds), easily spanning several regular poll
+    // ticks. Without this guard, a poll tick's _refreshSonos() can catch the
+    // target zone mid-flush/re-queue and report a stale near-empty snapshot
+    // that overwrites the correct state THIS function reports once it's
+    // actually done — confirmed live, the transfer itself was correct on the
+    // real speakers but the module kept showing an empty queue afterward.
+    this._transferInProgress = true;
+    try {
+      const toCoordinator = this._sonosForZone(toZone);
+      await toCoordinator.flush();
+      for (const uri of urisToQueue) {
+        await toCoordinator.queue(uri);
+      }
+      await toCoordinator.selectQueue();
+      if (wasPlaying) await toCoordinator.play();
+    } catch (err) {
+      this.sendSocketNotification("SPOTIFY_ERROR", { message: `Could not move playback to the new speaker: ${err.message}` });
+    } finally {
+      this._transferInProgress = false;
+    }
+
+    await this._refreshSonos();
+  },
+
   // Reports the now-playing/progress/queue state for exactly this zone — never
   // borrowed from a different one. Confirmed live: selecting a zone that isn't
   // playing Spotify used to keep showing whatever zone WAS, under the newly
@@ -386,6 +475,11 @@ module.exports = NodeHelper.create({
   // Spotify content, so a fresh overlay open lands on a sensible default —
   // matching "if music's already playing, use that speaker automatically".
   async _refreshSonos() {
+    // See _transferPlayback: skip entirely while one's in flight rather than
+    // risk reporting a mid-transfer snapshot that overwrites its eventual
+    // (correct) result.
+    if (this._transferInProgress) return;
+
     let entryPoint;
     try {
       entryPoint = await this._ensureSonosDevice();

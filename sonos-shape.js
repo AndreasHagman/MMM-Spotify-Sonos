@@ -65,4 +65,39 @@ function upcomingQueueItems(rawQueueItems, queuePosition) {
   return items.slice(queuePosition);
 }
 
-module.exports = { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems, shapeProgress };
+// Sonos's own URIs (from currentTrack()/getQueue(), e.g.
+// "x-sonos-spotify:spotify%3atrack%3aXYZ?sid=9&flags=...") aren't accepted by
+// sonos.queue() the way a plain "spotify:track:XYZ" URI is — the library's
+// GenerateMetadata() only recognizes URIs starting with "spotify:", so moving
+// a track onto a different zone (re-queuing it there) needs this reversed
+// back into the plain form first. Confirmed against real Sonos output.
+function toSpotifyUri(rawUri) {
+  if (typeof rawUri !== "string") return null;
+  const match = rawUri.match(/^x-sonos-spotify:([^?]+)/i);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+// What should be (re-)queued on a different zone when moving playback there:
+// the current track and everything still ahead of it — not the whole queue
+// from track 1, which would replay what's already been heard. Falls back to
+// just the current track (from its own URI) if the queue can't be resolved,
+// so a transfer still does something rather than nothing.
+function transferQueueUris(rawQueueItems, queuePosition, currentTrackUri) {
+  const items = rawQueueItems || [];
+  if (Number.isInteger(queuePosition) && queuePosition >= 1) {
+    const fromCurrent = items
+      .slice(queuePosition - 1)
+      .map((item) => toSpotifyUri(item?.uri))
+      .filter(Boolean);
+    if (fromCurrent.length > 0) return fromCurrent;
+  }
+  const fallback = toSpotifyUri(currentTrackUri);
+  return fallback ? [fallback] : [];
+}
+
+module.exports = { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems, shapeProgress, toSpotifyUri, transferQueueUris };

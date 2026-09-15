@@ -3,7 +3,7 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems, shapeProgress } = require("../sonos-shape");
+const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems, shapeProgress, toSpotifyUri, transferQueueUris } = require("../sonos-shape");
 
 describe("shapeZones()", () => {
   it("shapes a list of raw Sonos groups into id/name/coordinatorHost", () => {
@@ -101,6 +101,53 @@ describe("shapeProgress()", () => {
   it("returns nulls rather than throwing for non-numeric or non-finite values", () => {
     assert.deepStrictEqual(shapeProgress({ position: "42", duration: 210 }), { position: null, duration: 210 });
     assert.deepStrictEqual(shapeProgress({ position: NaN, duration: Infinity }), { position: null, duration: null });
+  });
+});
+
+describe("toSpotifyUri()", () => {
+  it("reverses a raw Sonos Spotify URI back into the plain spotify: form", () => {
+    assert.strictEqual(toSpotifyUri("x-sonos-spotify:spotify%3atrack%3a2XRwi7ssCehqbhn35DJVA8?sid=9&flags=8232&sn=2"), "spotify:track:2XRwi7ssCehqbhn35DJVA8");
+  });
+
+  it("handles an uppercase-encoded URI the same way", () => {
+    assert.strictEqual(toSpotifyUri("x-sonos-spotify:spotify%3Atrack%3AABC?sid=9"), "spotify:track:ABC");
+  });
+
+  it("returns null for a non-Spotify or malformed URI rather than throwing", () => {
+    assert.strictEqual(toSpotifyUri("x-sonosapi-stream:s25111?sid=254"), null);
+    assert.strictEqual(toSpotifyUri(null), null);
+    assert.strictEqual(toSpotifyUri(undefined), null);
+    assert.strictEqual(toSpotifyUri(""), null);
+  });
+});
+
+describe("transferQueueUris()", () => {
+  const items = [
+    { uri: "x-sonos-spotify:spotify%3atrack%3aAAA?sid=9" },
+    { uri: "x-sonos-spotify:spotify%3atrack%3aBBB?sid=9" },
+    { uri: "x-sonos-spotify:spotify%3atrack%3aCCC?sid=9" }
+  ];
+
+  it("returns the current track and everything after it, not the whole queue", () => {
+    assert.deepStrictEqual(transferQueueUris(items, 2, "x-sonos-spotify:spotify%3atrack%3aBBB?sid=9"), ["spotify:track:BBB", "spotify:track:CCC"]);
+  });
+
+  it("returns just the last track when the current one is the final item", () => {
+    assert.deepStrictEqual(transferQueueUris(items, 3, "x-sonos-spotify:spotify%3atrack%3aCCC?sid=9"), ["spotify:track:CCC"]);
+  });
+
+  it("falls back to the current track's own URI when queuePosition is invalid", () => {
+    assert.deepStrictEqual(transferQueueUris(items, 0, "x-sonos-spotify:spotify%3atrack%3aBBB?sid=9"), ["spotify:track:BBB"]);
+    assert.deepStrictEqual(transferQueueUris(items, undefined, "x-sonos-spotify:spotify%3atrack%3aBBB?sid=9"), ["spotify:track:BBB"]);
+  });
+
+  it("falls back to the current track when the queue is empty/unreadable", () => {
+    assert.deepStrictEqual(transferQueueUris([], 1, "x-sonos-spotify:spotify%3atrack%3aBBB?sid=9"), ["spotify:track:BBB"]);
+    assert.deepStrictEqual(transferQueueUris(null, 1, "x-sonos-spotify:spotify%3atrack%3aBBB?sid=9"), ["spotify:track:BBB"]);
+  });
+
+  it("returns an empty array when nothing at all can be resolved", () => {
+    assert.deepStrictEqual(transferQueueUris([], 1, null), []);
   });
 });
 

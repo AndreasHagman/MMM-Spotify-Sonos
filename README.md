@@ -115,10 +115,22 @@ now" / "Add to queue" / "Play-pause" / "Skip" all talk to that Sonos
 speaker directly over your local network, the same way `MMM-Sonos`
 does. Spotify's Web API is only used for logging in and for search.
 
-Note: the collapsed "now playing" display always shows whichever zone
-the module detects playing Spotify content, which may differ from the
-zone you've explicitly selected for new commands if more than one zone
-is in use at once.
+Only one zone is ever "selected" (`activeDeviceId`) at a time — the
+now-playing panel, progress bar, and "Up next" all report on that zone
+specifically, showing an idle state if it isn't genuinely playing
+Spotify rather than borrowing another zone's now-playing info. Nothing
+selected yet auto-detects whichever zone is playing Spotify content, so
+a fresh session lands on a sensible default; after that, only an
+explicit "Change speaker" pick (or logging out) changes it.
+
+**"Change speaker" moves the music with you**, the way switching
+devices in Spotify Connect does: picking a different zone while one is
+already playing moves the current track and everything still queued
+over to the new zone (starting the current track over from 0:00, not
+resuming its exact position) and pauses the old zone, rather than
+starting fresh on a silent speaker while the old one keeps playing.
+Moving a long queue takes one request per track, so a large playlist's
+queue can take a noticeable few seconds to fully move over.
 
 **"Up next"** shows Sonos's own queue, which only contains what's been
 explicitly queued (via this module's "Add to queue", or the Sonos/Spotify
