@@ -206,6 +206,14 @@
   border-radius: 8px;
 }
 
+/* Without this, the class's own `display: flex` above outranks the browser's
+   default `[hidden] { display: none }` (same specificity, author rule wins),
+   so toggling the `hidden` property alone never actually hides the list —
+   same fix already applied to .mmm-spotify-sonos__queue below. */
+.mmm-spotify-sonos__device-picker-list[hidden] {
+  display: none;
+}
+
 .mmm-spotify-sonos__device-picker-item,
 .mmm-spotify-sonos__device-picker-empty {
   background: rgba(255, 255, 255, 0.06);
