@@ -81,7 +81,10 @@ below for the full explanation.
      module: 'MMM-Spotify-Sonos',
      position: 'bottom_right',
      config: {
-       clientId: 'YOUR_SPOTIFY_CLIENT_ID'
+       clientId: 'YOUR_SPOTIFY_CLIENT_ID',
+       // Optional — how many "Up next" items to show before collapsing the
+       // rest behind a "Show more" button. Defaults to 5.
+       maxQueueItemsShown: 5
      }
    }
    ```
