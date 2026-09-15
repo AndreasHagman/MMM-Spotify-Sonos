@@ -234,6 +234,27 @@
   opacity: 0.6;
 }
 
+/* --- Top row: queue (left) + transport controls (right) --------------------- */
+
+.mmm-spotify-sonos__top-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  /* Falls back to stacked (queue above controls) rather than squeezing both
+     illegibly narrow on a small/portrait touchscreen. */
+  flex-wrap: wrap;
+}
+
+.mmm-spotify-sonos__top-row > .mmm-spotify-sonos__queue {
+  flex: 1 1 240px;
+  max-width: 50%;
+  min-width: 0;
+}
+
+.mmm-spotify-sonos__top-row > .mmm-spotify-sonos__overlay-controls {
+  flex: 1 1 200px;
+}
+
 /* --- Transport controls ----------------------------------------------------- */
 
 .mmm-spotify-sonos__overlay-controls {
