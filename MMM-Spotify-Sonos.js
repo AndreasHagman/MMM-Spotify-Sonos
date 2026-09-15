@@ -248,20 +248,20 @@ Module.register("MMM-Spotify-Sonos", {
     this._devicePickerEl.className = "mmm-spotify-sonos__device-picker";
     body.appendChild(this._devicePickerEl);
 
-    // Queue (left) and transport controls (right) share a row instead of each
+    // Transport controls (left) and queue (right) share a row instead of each
     // taking a full-width block stacked on its own — a long "Up next" list
     // otherwise pushed search/results well below the fold.
     const topRow = document.createElement("div");
     topRow.className = "mmm-spotify-sonos__top-row";
     body.appendChild(topRow);
 
-    this._queueEl = document.createElement("div");
-    this._queueEl.className = "mmm-spotify-sonos__queue";
-    topRow.appendChild(this._queueEl);
-
     this._nowPlayingControlsEl = document.createElement("div");
     this._nowPlayingControlsEl.className = "mmm-spotify-sonos__overlay-controls";
     topRow.appendChild(this._nowPlayingControlsEl);
+
+    this._queueEl = document.createElement("div");
+    this._queueEl.className = "mmm-spotify-sonos__queue";
+    topRow.appendChild(this._queueEl);
 
     // Created once and never rebuilt, so typing (focus, caret, keyboard) survives
     // search results arriving.
