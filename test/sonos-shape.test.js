@@ -3,7 +3,7 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems } = require("../sonos-shape");
+const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems, shapeProgress } = require("../sonos-shape");
 
 describe("shapeZones()", () => {
   it("shapes a list of raw Sonos groups into id/name/coordinatorHost", () => {
@@ -85,6 +85,22 @@ describe("upcomingQueueItems()", () => {
   it("returns an empty array for a missing/empty queue", () => {
     assert.deepStrictEqual(upcomingQueueItems(null, 1), []);
     assert.deepStrictEqual(upcomingQueueItems([], 1), []);
+  });
+});
+
+describe("shapeProgress()", () => {
+  it("extracts numeric position/duration from a raw track", () => {
+    assert.deepStrictEqual(shapeProgress({ position: 42, duration: 210 }), { position: 42, duration: 210 });
+  });
+
+  it("returns nulls when position/duration are missing", () => {
+    assert.deepStrictEqual(shapeProgress({}), { position: null, duration: null });
+    assert.deepStrictEqual(shapeProgress(null), { position: null, duration: null });
+  });
+
+  it("returns nulls rather than throwing for non-numeric or non-finite values", () => {
+    assert.deepStrictEqual(shapeProgress({ position: "42", duration: 210 }), { position: null, duration: 210 });
+    assert.deepStrictEqual(shapeProgress({ position: NaN, duration: Infinity }), { position: null, duration: null });
   });
 });
 

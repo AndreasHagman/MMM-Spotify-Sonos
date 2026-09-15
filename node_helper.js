@@ -8,7 +8,7 @@ const { isTokenExpired, readTokenFile, writeTokenFile, deleteTokenFile, refreshA
 const { spotifyRequest } = require("./spotify-request");
 const { shapeSearchResults, shapeOwnPlaylists, mergePlaylists } = require("./spotify-shape");
 const { AsyncDeviceDiscovery, Sonos } = require("sonos");
-const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems } = require("./sonos-shape");
+const { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems, shapeProgress } = require("./sonos-shape");
 const { resolveKeyboardCommand } = require("./virtual-keyboard");
 
 // Spotify requires HTTPS redirect URIs except for the loopback IP literal
@@ -302,7 +302,7 @@ module.exports = NodeHelper.create({
 
   _sendEmptySonosState() {
     this.sendSocketNotification("SPOTIFY_DEVICES_RESULT", { devices: [] });
-    this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null });
+    this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null, progress: { position: null, duration: null } });
     this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { queue: [] });
   },
 
@@ -359,7 +359,8 @@ module.exports = NodeHelper.create({
       this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", {
         isPlaying: state === "playing",
         device: { id: group.ID, name: group.Name },
-        track: shapeTrack(track)
+        track: shapeTrack(track),
+        progress: shapeProgress(track)
       });
 
       let queueItems = [];
@@ -374,7 +375,7 @@ module.exports = NodeHelper.create({
     }
 
     // No zone is playing Spotify content.
-    this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null });
+    this.sendSocketNotification("SPOTIFY_PLAYBACK_STATE", { isPlaying: false, device: null, track: null, progress: { position: null, duration: null } });
     this.sendSocketNotification("SPOTIFY_QUEUE_RESULT", { queue: [] });
   },
 

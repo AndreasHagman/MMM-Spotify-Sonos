@@ -32,6 +32,17 @@ function isSpotifyTrack(rawTrack) {
   return Boolean(rawTrack?.uri && rawTrack.uri.toLowerCase().includes("spotify"));
 }
 
+// currentTrack() already computes position/duration (seconds, from Sonos's
+// RelTime/TrackDuration) on the currently-playing track — a separate shaper
+// (rather than folding this into shapeTrack) because it's a "now playing
+// state" concept, not a track one: a queue item run through shapeTrack has
+// no meaningful position, having not played yet.
+function shapeProgress(rawTrack) {
+  const position = typeof rawTrack?.position === "number" && Number.isFinite(rawTrack.position) ? rawTrack.position : null;
+  const duration = typeof rawTrack?.duration === "number" && Number.isFinite(rawTrack.duration) ? rawTrack.duration : null;
+  return { position, duration };
+}
+
 // getQueue() always returns the WHOLE Sonos queue from position 1, including
 // tracks already played — it never shrinks or reorders as playback advances.
 // Left unfiltered, "Up Next" would keep showing already-skipped-past tracks
@@ -54,4 +65,4 @@ function upcomingQueueItems(rawQueueItems, queuePosition) {
   return items.slice(queuePosition);
 }
 
-module.exports = { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems };
+module.exports = { shapeZones, shapeTrack, isSpotifyTrack, upcomingQueueItems, shapeProgress };

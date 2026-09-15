@@ -234,13 +234,13 @@
   opacity: 0.6;
 }
 
-/* --- Top row: queue (left) + transport controls (right) --------------------- */
+/* --- Top row: now-playing panel (left) + queue (right) ----------------------- */
 
 .mmm-spotify-sonos__top-row {
   display: flex;
   align-items: flex-start;
   gap: 1rem;
-  /* Falls back to stacked (queue above controls) rather than squeezing both
+  /* Falls back to stacked (panel above queue) rather than squeezing both
      illegibly narrow on a small/portrait touchscreen. */
   flex-wrap: wrap;
 }
@@ -251,8 +251,78 @@
   min-width: 0;
 }
 
-.mmm-spotify-sonos__top-row > .mmm-spotify-sonos__overlay-controls {
+.mmm-spotify-sonos__top-row > .mmm-spotify-sonos__now-playing-panel {
   flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* --- Now playing (cover/title/artist) ---------------------------------------- */
+
+.mmm-spotify-sonos__now-playing-panel-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mmm-spotify-sonos__now-playing-panel-info[hidden] {
+  display: none;
+}
+
+.mmm-spotify-sonos__now-playing-panel-cover {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex: none;
+}
+
+.mmm-spotify-sonos__now-playing-panel-text {
+  min-width: 0;
+}
+
+.mmm-spotify-sonos__now-playing-panel-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mmm-spotify-sonos__now-playing-panel-artist {
+  font-size: 0.85em;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Progress bar -------------------------------------------------------------- */
+
+.mmm-spotify-sonos__progress[hidden] {
+  display: none;
+}
+
+.mmm-spotify-sonos__progress-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.mmm-spotify-sonos__progress-fill {
+  height: 100%;
+  background: #1db954;
+  border-radius: 2px;
+}
+
+.mmm-spotify-sonos__progress-times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75em;
+  opacity: 0.65;
+  margin-top: 0.2rem;
 }
 
 /* --- Transport controls ----------------------------------------------------- */
@@ -423,11 +493,25 @@
 
 .mmm-spotify-sonos__queue-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
   background: rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   padding: 0.4rem 0.7rem;
+}
+
+.mmm-spotify-sonos__queue-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex: none;
+}
+
+.mmm-spotify-sonos__queue-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .mmm-spotify-sonos__queue-show-more {

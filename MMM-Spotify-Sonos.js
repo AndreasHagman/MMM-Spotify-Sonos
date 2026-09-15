@@ -17,6 +17,9 @@ Module.register("MMM-Spotify-Sonos", {
     this.loggedIn = false;
     this.profile = null;
     this.playback = { isPlaying: false, device: null, track: null };
+    this.progress = { position: null, duration: null };
+    this._progressReceivedAt = null;
+    this._progressTimer = null;
     this.lastError = null;
     this.overlayOpen = false;
     this.devices = [];
@@ -59,12 +62,19 @@ Module.register("MMM-Spotify-Sonos", {
         // An error only clears when the specific action that caused it succeeds
         // (see the SPOTIFY_SEARCH_RESULT case below).
         this.playback = payload;
+        // Baseline for the progress bar's between-poll interpolation (see
+        // _currentElapsed) — recorded fresh on every poll tick regardless of
+        // whether position actually changed, so drift never accumulates.
+        this.progress = payload.progress || { position: null, duration: null };
+        this._progressReceivedAt = Date.now();
         // If nothing has been explicitly picked yet, adopt whichever zone is playing
         // Spotify content as the default target — this only fires once, the first
         // time a Spotify session is detected; after that the user (or this initial
         // adoption) owns activeDeviceId until they pick a different zone or log out.
         if (!this.activeDeviceId && payload.device) this.activeDeviceId = payload.device.id;
         this.updateDom();
+        this._renderNowPlayingInfo();
+        this._renderProgress();
         this._renderNowPlayingControls();
         this._renderDevicePicker();
         this._renderError();
@@ -113,6 +123,8 @@ Module.register("MMM-Spotify-Sonos", {
     // instant a new login lands and shows the PREVIOUS session's track/device
     // until the next poll tick replaces it.
     this.playback = { isPlaying: false, device: null, track: null };
+    this.progress = { position: null, duration: null };
+    this._progressReceivedAt = null;
   },
 
   _debouncedSearch(query) {
@@ -248,16 +260,29 @@ Module.register("MMM-Spotify-Sonos", {
     this._devicePickerEl.className = "mmm-spotify-sonos__device-picker";
     body.appendChild(this._devicePickerEl);
 
-    // Transport controls (left) and queue (right) share a row instead of each
-    // taking a full-width block stacked on its own — a long "Up next" list
-    // otherwise pushed search/results well below the fold.
+    // Now-playing panel (left: cover/title/artist, progress bar, transport
+    // controls) and queue (right) share a row instead of each taking a
+    // full-width block stacked on its own — a long "Up next" list otherwise
+    // pushed search/results well below the fold.
     const topRow = document.createElement("div");
     topRow.className = "mmm-spotify-sonos__top-row";
     body.appendChild(topRow);
 
+    const nowPlayingPanel = document.createElement("div");
+    nowPlayingPanel.className = "mmm-spotify-sonos__now-playing-panel";
+    topRow.appendChild(nowPlayingPanel);
+
+    this._nowPlayingInfoEl = document.createElement("div");
+    this._nowPlayingInfoEl.className = "mmm-spotify-sonos__now-playing-panel-info";
+    nowPlayingPanel.appendChild(this._nowPlayingInfoEl);
+
+    this._progressEl = document.createElement("div");
+    this._progressEl.className = "mmm-spotify-sonos__progress";
+    nowPlayingPanel.appendChild(this._progressEl);
+
     this._nowPlayingControlsEl = document.createElement("div");
     this._nowPlayingControlsEl.className = "mmm-spotify-sonos__overlay-controls";
-    topRow.appendChild(this._nowPlayingControlsEl);
+    nowPlayingPanel.appendChild(this._nowPlayingControlsEl);
 
     this._queueEl = document.createElement("div");
     this._queueEl.className = "mmm-spotify-sonos__queue";
@@ -285,10 +310,16 @@ Module.register("MMM-Spotify-Sonos", {
 
     this.sendSocketNotification("SPOTIFY_DEVICES_REQUEST");
     this._renderDevicePicker();
+    this._renderNowPlayingInfo();
+    this._renderProgress();
     this._renderNowPlayingControls();
     this._renderError();
     this._renderQueue();
     this._renderResults();
+    // Position/duration only arrive on poll ticks (up to `pollInterval` apart),
+    // which would make the bar visibly jump instead of moving smoothly — this
+    // repaints it every second from the last known baseline in between.
+    this._progressTimer = setInterval(() => this._renderProgress(), 1000);
   },
 
   _closeOverlay() {
@@ -297,6 +328,10 @@ Module.register("MMM-Spotify-Sonos", {
     // carrying over whatever was expanded from a previous visit.
     this._queueExpanded = false;
     this._devicePickerExpanded = false;
+    if (this._progressTimer) {
+      clearInterval(this._progressTimer);
+      this._progressTimer = null;
+    }
     if (this._overlayEl) {
       // Removing a focused input from the DOM doesn't reliably fire its own
       // "blur" first (browser-dependent), so this is the backstop that keeps
@@ -306,6 +341,8 @@ Module.register("MMM-Spotify-Sonos", {
       this._overlayEl = null;
       this._overlayBodyEl = null;
       this._devicePickerEl = null;
+      this._nowPlayingInfoEl = null;
+      this._progressEl = null;
       this._nowPlayingControlsEl = null;
       this._searchInputEl = null;
       this._deviceListEl = null;
@@ -378,6 +415,96 @@ Module.register("MMM-Spotify-Sonos", {
     container.appendChild(row);
     container.appendChild(list);
     this._deviceListEl = list;
+  },
+
+  // Cover/title/artist for whatever's actually playing, inside the overlay
+  // itself — previously only visible on the collapsed strip behind it (which
+  // the overlay's own backdrop dims), so opening the overlay lost sight of
+  // what was playing entirely.
+  _renderNowPlayingInfo() {
+    if (!this._nowPlayingInfoEl) return;
+    const el = this._nowPlayingInfoEl;
+    el.innerHTML = "";
+
+    const track = this.playback?.track;
+    if (!track?.name) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+
+    if (track.imageUrl) {
+      const cover = document.createElement("img");
+      cover.className = "mmm-spotify-sonos__now-playing-panel-cover";
+      cover.src = track.imageUrl;
+      el.appendChild(cover);
+    }
+
+    const text = document.createElement("div");
+    text.className = "mmm-spotify-sonos__now-playing-panel-text";
+
+    const title = document.createElement("div");
+    title.className = "mmm-spotify-sonos__now-playing-panel-title";
+    title.innerText = track.name;
+    text.appendChild(title);
+
+    const artist = document.createElement("div");
+    artist.className = "mmm-spotify-sonos__now-playing-panel-artist";
+    artist.innerText = track.artist || "";
+    text.appendChild(artist);
+
+    el.appendChild(text);
+  },
+
+  // Position only arrives on a poll tick, so between ticks this estimates how
+  // far playback has moved on using elapsed wall-clock time since the last
+  // one arrived — paused playback (or no baseline yet) just holds position.
+  _currentElapsed() {
+    const { position, duration } = this.progress || {};
+    if (position === null || duration === null) return 0;
+    if (!this.playback?.isPlaying || !this._progressReceivedAt) return position;
+    const sinceReceived = (Date.now() - this._progressReceivedAt) / 1000;
+    return Math.min(duration, position + sinceReceived);
+  },
+
+  _formatTime(seconds) {
+    const total = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
+    return `${mins}:${String(secs).padStart(2, "0")}`;
+  },
+
+  _renderProgress() {
+    if (!this._progressEl) return;
+    const el = this._progressEl;
+    const { position, duration } = this.progress || {};
+    if (position === null || !duration) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML = "";
+
+    const elapsed = this._currentElapsed();
+    const pct = Math.min(100, Math.max(0, (elapsed / duration) * 100));
+
+    const track = document.createElement("div");
+    track.className = "mmm-spotify-sonos__progress-track";
+    const fill = document.createElement("div");
+    fill.className = "mmm-spotify-sonos__progress-fill";
+    fill.style.width = `${pct}%`;
+    track.appendChild(fill);
+    el.appendChild(track);
+
+    const times = document.createElement("div");
+    times.className = "mmm-spotify-sonos__progress-times";
+    const elapsedLabel = document.createElement("span");
+    elapsedLabel.innerText = this._formatTime(elapsed);
+    times.appendChild(elapsedLabel);
+    const durationLabel = document.createElement("span");
+    durationLabel.innerText = this._formatTime(duration);
+    times.appendChild(durationLabel);
+    el.appendChild(times);
   },
 
   _renderNowPlayingControls() {
@@ -593,16 +720,27 @@ Module.register("MMM-Spotify-Sonos", {
       const row = document.createElement("div");
       row.className = "mmm-spotify-sonos__queue-row";
 
+      if (item.imageUrl) {
+        const thumb = document.createElement("img");
+        thumb.className = "mmm-spotify-sonos__queue-thumb";
+        thumb.src = item.imageUrl;
+        row.appendChild(thumb);
+      }
+
+      const text = document.createElement("div");
+      text.className = "mmm-spotify-sonos__queue-text";
+
       const name = document.createElement("span");
       name.className = "mmm-spotify-sonos__queue-name";
       name.innerText = item.name || "";
-      row.appendChild(name);
+      text.appendChild(name);
 
       const artist = document.createElement("span");
       artist.className = "mmm-spotify-sonos__queue-artist";
       artist.innerText = item.artist || "";
-      row.appendChild(artist);
+      text.appendChild(artist);
 
+      row.appendChild(text);
       list.appendChild(row);
     });
     section.appendChild(list);

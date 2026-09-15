@@ -187,7 +187,8 @@ been verified on real hardware yet — a Wayland-native keyboard (e.g.
 ## Scope
 
 v1 supports track/playlist search, play now, add to queue, play/pause,
-skip next/previous, and device selection. Volume, shuffle, and repeat
+skip next/previous, device selection, and a now-playing view (cover,
+title, artist, progress) inside the overlay. Volume, shuffle, and repeat
 are intentionally out of scope for v1 (see the design spec).
 
 ## License
