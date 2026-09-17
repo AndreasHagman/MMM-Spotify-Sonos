@@ -5,8 +5,6 @@ the queue, and choose which Sonos speaker or speaker group they play on
 — controlled directly over your local network, not through Spotify
 Connect (see "How playback control works" below).
 
-<img width="1253" height="860" alt="image" src="https://github.com/user-attachments/assets/3f3ccf65-74e9-49a1-841c-ae9987d92cfc" />
-
 
 ## Screenshots
 
